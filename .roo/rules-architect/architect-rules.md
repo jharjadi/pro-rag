@@ -60,7 +60,7 @@
 
 ## ARCHITECTURE CONSTRAINTS (V1)
 
-- **query-api** (Python/FastAPI): Online query runtime — hybrid retrieval, RRF merge, Cohere rerank (fail-open), LLM prompting, citations, abstain logic
+- **core-api-go** (Go/Chi): Online query runtime — hybrid retrieval, RRF merge, Cohere rerank (fail-open), LLM prompting, citations, abstain logic
 - **ingest** (Python): Ingestion pipeline — extract, restructure, chunk, embed, FTS, write to Postgres
 - **Postgres** (pgvector + FTS): Canonical data store — HNSW vector index, GIN FTS index
 - **No UI in V1** — API-only, eval scripts for validation

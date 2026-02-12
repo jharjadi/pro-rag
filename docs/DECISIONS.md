@@ -7,7 +7,7 @@ Architectural Decision Records (ADRs) for the pro-rag project.
 ## ADR-001: All-Python for V1 (instead of Go + Python)
 
 **Date:** 2026-02-12  
-**Status:** Accepted
+**Status:** Superseded by ADR-004
 
 **Context:** The original spec (v7) prescribed Go for the query runtime and Python for ingestion. For a V1 POC, we evaluated whether the two-language approach was justified.
 
@@ -23,7 +23,7 @@ Architectural Decision Records (ADRs) for the pro-rag project.
 - Go + Python (as spec'd): better production performance, but slower to iterate on a POC.
 - All-Go: Go's ML/NLP ecosystem is too weak for ingestion (PDF extraction, sentence-transformers, etc.).
 
-**Upgrade path:** If V2 needs sub-10ms p99 on the query path, rewrite query-api in Go. The DB contract makes this a clean swap.
+**Why superseded:** See ADR-004. The contract boundary erosion risk was deemed too high — with both services in Python, the temptation to share code across the Option A boundary undermines the clean separation that makes future evolution possible. Two languages enforce the contract physically.
 
 ---
 
@@ -50,3 +50,26 @@ Architectural Decision Records (ADRs) for the pro-rag project.
 **Decision:** Use HNSW for vector index in V1.
 
 **Rationale:** Works well at small/medium scale without IVF tuning. IVF deferred to V2.
+
+---
+
+## ADR-004: Go query runtime + Python ingestion (as spec'd)
+
+**Date:** 2026-02-12  
+**Status:** Accepted (supersedes ADR-001)
+
+**Context:** ADR-001 proposed all-Python for V1. During plan review, we identified that the contract boundary erosion risk was the critical issue: with both services in Python, nothing prevents importing ingestion modules into the query service, silently coupling them and killing the clean swap path.
+
+**Decision:** Use Go (Chi router) for the query runtime and Python for the ingestion pipeline, as the original spec prescribes.
+
+**Rationale:**
+- **Forced contract separation.** Two languages make it physically impossible to `from ingest.chunk import ...` in the query service. The Option A boundary is enforced by the type system, not by discipline.
+- **The query service is simple.** ~5 endpoints, DB reads, HTTP calls to Cohere/LLM, JSON responses. Go with Chi handles this well. The complexity is in the logic (RRF, abstain, context budgeting), not the framework.
+- **Go's strengths align with query needs.** Low latency, excellent concurrency for parallel vector+FTS queries, small Docker images, fast startup.
+- **Python's strengths align with ingestion needs.** PDF extraction, sentence-transformers, tiktoken, NLP libraries — Go has nothing comparable.
+- **The iteration loop that matters is ingestion → eval.** That's all Python. The query service changes less frequently once retrieval logic is right.
+
+**Trade-off acknowledged:**
+- Two Dockerfiles, two test runners (`go test` + `pytest`), two dependency ecosystems.
+- Slightly more infrastructure complexity.
+- Accepted because the contract enforcement benefit outweighs the infrastructure cost.

@@ -13,30 +13,29 @@ Production-shaped RAG system for English-only internal knowledge base.
 └─────────────┘     │  - chunks, embeddings, fts        │
                      │  - ingestion_runs                 │
 ┌─────────────┐     │                                    │
-│  query-api   │◀───│  HNSW vector index + GIN FTS      │
-│  (Python/    │     └──────────────────────────────────┘
-│   FastAPI)   │
+│  core-api-go │◀───│  HNSW vector index + GIN FTS      │
+│  (Go / Chi)  │     └──────────────────────────────────┘
 │              │────▶ Cohere Rerank API (fail-open)
 │              │────▶ LLM API (Anthropic/OpenAI)
 └─────────────┘
 ```
 
-## Services (V1 — All-Python)
+## Services
 
 | Service | Language | Role |
 |---------|----------|------|
-| **query-api** | Python / FastAPI | Online query runtime: hybrid retrieval, RRF merge, Cohere rerank, LLM prompting, citations, abstain |
+| **core-api-go** | Go / Chi | Online query runtime: hybrid retrieval, RRF merge, Cohere rerank, LLM prompting, citations, abstain |
 | **ingest** | Python | Ingestion pipeline: extract, restructure, chunk, embed, FTS, write to Postgres |
 | **postgres** | Postgres 16 + pgvector | Canonical data store: HNSW vector index, GIN FTS index |
 | **migrate** | One-shot | Runs DB migrations then exits |
 
 ## Key Contracts
 
-- **Option A**: Python ingestion writes to DB. Query runtime reads from DB. No direct coupling.
+- **Option A**: Python ingestion writes to DB. Go query runtime reads from DB. No direct coupling. Two languages enforce this boundary physically.
 - **Tenant isolation**: Every query filters by `tenant_id`.
 - **Latest-only**: Always filter `is_active = true` on `document_versions`.
 - **Abstain over hallucinate**: Refuse to answer when evidence is weak.
 
-## Decision: All-Python for V1
+## Language Decision
 
-See `docs/DECISIONS.md` ADR-001.
+Go for query runtime, Python for ingestion. See `docs/DECISIONS.md` ADR-004 (supersedes ADR-001).
