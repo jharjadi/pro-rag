@@ -1,0 +1,122 @@
+services:
+  # ── Postgres 16 + pgvector ──────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: prorag-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-prorag}
+      POSTGRES_USER: ${POSTGRES_USER:-prorag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-prorag_dev}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-prorag} -d ${POSTGRES_DB:-prorag}"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  # ── Migrate (one-shot) ─────────────────────────────────
+  migrate:
+    image: postgres:16-alpine
+    container_name: prorag-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-prorag}
+      PGUSER: ${POSTGRES_USER:-prorag}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-prorag_dev}
+    volumes:
+      - ./migrations:/migrations:ro
+      - ./migrate:/migrate:ro
+    entrypoint: ["sh", "/migrate/run.sh"]
+
+  # ── Embedding Sidecar ──────────────────────────────────
+  embed:
+    build:
+      context: ./embed-svc
+      dockerfile: Dockerfile
+    container_name: prorag-embed
+    environment:
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-base-en-v1.5}
+      EMBED_PORT: 8001
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  # ── Go Query API ───────────────────────────────────────
+  core-api-go:
+    build:
+      context: ./core-api-go
+      dockerfile: Dockerfile
+    container_name: prorag-api
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      embed:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-prorag}:${POSTGRES_PASSWORD:-prorag_dev}@postgres:5432/${POSTGRES_DB:-prorag}?sslmode=disable
+      API_PORT: ${API_PORT:-8000}
+      API_HOST: 0.0.0.0
+      EMBED_ENDPOINT: http://embed:8001/embed
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
+      COHERE_RERANK_MODEL: ${COHERE_RERANK_MODEL:-rerank-v3.5}
+      RERANK_TIMEOUT_MS: ${RERANK_TIMEOUT_MS:-3000}
+      RERANK_MAX_DOCS: ${RERANK_MAX_DOCS:-50}
+      RERANK_FAIL_OPEN: ${RERANK_FAIL_OPEN:-true}
+      ABSTAIN_RERANK_THRESHOLD: ${ABSTAIN_RERANK_THRESHOLD:-0.15}
+      ABSTAIN_RRF_THRESHOLD: ${ABSTAIN_RRF_THRESHOLD:-0.030}
+      MAX_CONTEXT_TOKENS: ${MAX_CONTEXT_TOKENS:-6000}
+      CONTEXT_OVERHEAD_TOKENS: ${CONTEXT_OVERHEAD_TOKENS:-1000}
+      MAX_CONTEXT_CHUNKS: ${MAX_CONTEXT_CHUNKS:-12}
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      LLM_MODEL: ${LLM_MODEL:-claude-sonnet-4-20250514}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-1024}
+      K_VEC: ${K_VEC:-50}
+      K_FTS: ${K_FTS:-50}
+      RRF_K: ${RRF_K:-60}
+    ports:
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
+    volumes:
+      - ./web:/web:ro
+
+  # ── Python Ingestion (on-demand) ───────────────────────
+  ingest:
+    build:
+      context: ./ingest
+      dockerfile: Dockerfile
+    container_name: prorag-ingest
+    profiles:
+      - ingest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-prorag}:${POSTGRES_PASSWORD:-prorag_dev}@postgres:5432/${POSTGRES_DB:-prorag}?sslmode=disable
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-base-en-v1.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-768}
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-256}
+      CHUNK_TARGET_TOKENS: ${CHUNK_TARGET_TOKENS:-450}
+      CHUNK_MIN_TOKENS: ${CHUNK_MIN_TOKENS:-350}
+      CHUNK_MAX_TOKENS: ${CHUNK_MAX_TOKENS:-500}
+      CHUNK_HARD_CAP_TOKENS: ${CHUNK_HARD_CAP_TOKENS:-800}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-0}
+      ARTIFACT_BASE_PATH: /data/artifacts
+    volumes:
+      - ./data:/data
+      - artifacts:/data/artifacts
+
+volumes:
+  pgdata:
+  artifacts:

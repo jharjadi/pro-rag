@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pro-rag — Knowledge Base Chat</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1b26;
+    --surface2: #24253a;
+    --border: #2f3146;
+    --text: #c0caf5;
+    --text-dim: #565f89;
+    --accent: #7aa2f7;
+    --accent-dim: #3d59a1;
+    --green: #9ece6a;
+    --orange: #ff9e64;
+    --red: #f7768e;
+    --radius: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ─────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  header h1 span {
+    color: var(--text-dim);
+    font-weight: 400;
+    font-size: 14px;
+    margin-left: 8px;
+  }
+
+  .settings {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .settings label {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .settings input[type="text"] {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    width: 300px;
+  }
+
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+
+  .toggle input { display: none; }
+
+  .toggle .slider {
+    width: 32px;
+    height: 18px;
+    background: var(--border);
+    border-radius: 9px;
+    position: relative;
+    transition: background 0.2s;
+  }
+
+  .toggle .slider::after {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: var(--text-dim);
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s, background 0.2s;
+  }
+
+  .toggle input:checked + .slider {
+    background: var(--accent-dim);
+  }
+
+  .toggle input:checked + .slider::after {
+    transform: translateX(14px);
+    background: var(--accent);
+  }
+
+  /* ── Chat area ──────────────────────────────── */
+  .chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .welcome {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+  }
+
+  .welcome h2 {
+    font-size: 24px;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .welcome p {
+    font-size: 14px;
+    max-width: 500px;
+    margin: 0 auto 20px;
+    line-height: 1.6;
+  }
+
+  .welcome .examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .welcome .example-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .welcome .example-btn:hover {
+    border-color: var(--accent);
+    background: var(--surface);
+  }
+
+  /* ── Messages ───────────────────────────────── */
+  .message {
+    max-width: 800px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .message.user {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .message.user .bubble {
+    background: var(--accent-dim);
+    color: #fff;
+    border-radius: var(--radius) var(--radius) 4px var(--radius);
+    padding: 12px 16px;
+    max-width: 70%;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .message.assistant .bubble {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) var(--radius) 4px;
+    padding: 16px 20px;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .message.assistant .answer {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  /* Citations */
+  .citations {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .citations-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .citation {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--surface2);
+    border-radius: 6px;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .citation .chunk-id {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--accent);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .citation .doc-title {
+    color: var(--text);
+  }
+
+  .citation .heading {
+    color: var(--text-dim);
+    margin-left: 4px;
+  }
+
+  /* Abstain */
+  .abstain-badge {
+    display: inline-block;
+    background: var(--orange);
+    color: var(--bg);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+  }
+
+  /* Debug panel */
+  .debug-panel {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .debug-panel summary {
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .debug-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 12px;
+    margin-top: 8px;
+  }
+
+  .debug-grid .label { color: var(--text-dim); }
+  .debug-grid .value { color: var(--text); }
+
+  /* Loading */
+  .loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-dim);
+    font-size: 13px;
+    padding: 12px 0;
+  }
+
+  .loading .dots span {
+    animation: blink 1.4s infinite both;
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .loading .dots span:nth-child(2) { animation-delay: 0.2s; }
+  .loading .dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes blink {
+    0%, 80%, 100% { opacity: 0.2; }
+    40% { opacity: 1; }
+  }
+
+  /* Error */
+  .error-msg {
+    background: rgba(247, 118, 142, 0.1);
+    border: 1px solid var(--red);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: var(--red);
+    font-size: 13px;
+  }
+
+  /* ── Input area ─────────────────────────────── */
+  .input-area {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .input-row {
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+  }
+
+  .input-row textarea {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    resize: none;
+    min-height: 44px;
+    max-height: 120px;
+    line-height: 1.5;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .input-row textarea:focus {
+    border-color: var(--accent);
+  }
+
+  .input-row textarea::placeholder {
+    color: var(--text-dim);
+  }
+
+  .send-btn {
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s, opacity 0.2s;
+    flex-shrink: 0;
+  }
+
+  .send-btn:hover { background: #89b4fa; }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .send-btn svg {
+    width: 20px;
+    height: 20px;
+    fill: var(--bg);
+  }
+
+  .footer-note {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>pro-rag <span>Knowledge Base Chat</span></h1>
+  <div class="settings">
+    <label>Tenant ID:</label>
+    <input type="text" id="tenantId" value="00000000-0000-0000-0000-000000000001">
+    <label class="toggle">
+      <input type="checkbox" id="debugToggle">
+      <div class="slider"></div>
+      <span style="font-size:12px; color:var(--text-dim)">Debug</span>
+    </label>
+  </div>
+</header>
+
+<div class="chat-container" id="chat">
+  <div class="welcome" id="welcome">
+    <h2>Ask your knowledge base</h2>
+    <p>Ask questions about company policies, procedures, and guidelines. Answers are grounded in ingested documents with citations.</p>
+    <div class="examples">
+      <button class="example-btn" onclick="askExample(this)">What is the password policy?</button>
+      <button class="example-btn" onclick="askExample(this)">How do I submit an expense report?</button>
+      <button class="example-btn" onclick="askExample(this)">What are the remote work requirements?</button>
+      <button class="example-btn" onclick="askExample(this)">What is the incident response procedure?</button>
+    </div>
+  </div>
+</div>
+
+<div class="input-area">
+  <div class="input-row">
+    <textarea id="questionInput" placeholder="Ask a question..." rows="1"
+      onkeydown="handleKeydown(event)" oninput="autoResize(this)"></textarea>
+    <button class="send-btn" id="sendBtn" onclick="sendQuestion()">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+  <div class="footer-note">pro-rag V1 — Answers are grounded in documents. The system will abstain when evidence is weak.</div>
+</div>
+
+<script>
+const chat = document.getElementById('chat');
+const input = document.getElementById('questionInput');
+const sendBtn = document.getElementById('sendBtn');
+const welcome = document.getElementById('welcome');
+let isLoading = false;
+
+function askExample(btn) {
+  input.value = btn.textContent;
+  sendQuestion();
+}
+
+function handleKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendQuestion();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function scrollToBottom() {
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function addUserMessage(text) {
+  if (welcome) welcome.remove();
+  const div = document.createElement('div');
+  div.className = 'message user';
+  div.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
+  chat.appendChild(div);
+  scrollToBottom();
+}
+
+function addLoadingMessage() {
+  const div = document.createElement('div');
+  div.className = 'message assistant';
+  div.id = 'loading-msg';
+  div.innerHTML = `
+    <div class="bubble">
+      <div class="loading">
+        <div class="dots"><span>·</span><span>·</span><span>·</span></div>
+        Searching documents and generating answer...
+      </div>
+    </div>`;
+  chat.appendChild(div);
+  scrollToBottom();
+}
+
+function removeLoadingMessage() {
+  const el = document.getElementById('loading-msg');
+  if (el) el.remove();
+}
+
+function addAssistantMessage(data) {
+  removeLoadingMessage();
+  const div = document.createElement('div');
+  div.className = 'message assistant';
+
+  let html = '<div class="bubble">';
+
+  // Abstain badge
+  if (data.abstained) {
+    html += '<div class="abstain-badge">ABSTAINED</div>';
+  }
+
+  // Answer text — highlight citation markers
+  const answer = escapeHtml(data.answer || '')
+    .replace(/\[chunk:([^\]]+)\]/g, '<span style="color:var(--accent);font-size:12px;font-family:monospace">[chunk:$1]</span>');
+  html += `<div class="answer">${answer}</div>`;
+
+  // Clarifying question
+  if (data.clarifying_question) {
+    html += `<div style="margin-top:8px;color:var(--orange);font-style:italic;font-size:13px">${escapeHtml(data.clarifying_question)}</div>`;
+  }
+
+  // Citations
+  if (data.citations && data.citations.length > 0) {
+    html += '<div class="citations"><div class="citations-title">Sources</div>';
+    for (const c of data.citations) {
+      const shortId = (c.chunk_id || '').substring(0, 8);
+      html += `<div class="citation">
+        <span class="chunk-id">${shortId}…</span>
+        <span class="doc-title">${escapeHtml(c.title || 'Unknown')}</span>
+        ${c.heading_path ? `<span class="heading">› ${escapeHtml(c.heading_path)}</span>` : ''}
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  // Debug info
+  if (data.debug) {
+    const d = data.debug;
+    html += `<details class="debug-panel">
+      <summary>Debug Info</summary>
+      <div class="debug-grid">
+        <span class="label">Vec candidates</span><span class="value">${d.vec_candidates ?? '-'}</span>
+        <span class="label">FTS candidates</span><span class="value">${d.fts_candidates ?? '-'}</span>
+        <span class="label">Merged candidates</span><span class="value">${d.merged_candidates ?? '-'}</span>
+        <span class="label">Reranker used</span><span class="value">${d.reranker_used ?? '-'}</span>
+        <span class="label">Reranker skipped</span><span class="value">${d.reranker_skipped ?? '-'}</span>
+        ${d.reranker_error ? `<span class="label">Reranker error</span><span class="value" style="color:var(--orange)">${escapeHtml(d.reranker_error)}</span>` : ''}
+        <span class="label">Context chunks</span><span class="value">${d.context_chunks ?? '-'}</span>
+        <span class="label">Context tokens (est)</span><span class="value">${d.context_tokens_est ?? '-'}</span>
+        ${d.top_scores ? `<span class="label">Top scores</span><span class="value">[${d.top_scores.map(s => s.toFixed(4)).join(', ')}]</span>` : ''}
+      </div>
+    </details>`;
+  }
+
+  html += '</div>';
+  div.innerHTML = html;
+  chat.appendChild(div);
+  scrollToBottom();
+}
+
+function addErrorMessage(msg) {
+  removeLoadingMessage();
+  const div = document.createElement('div');
+  div.className = 'message assistant';
+  div.innerHTML = `<div class="error-msg">⚠ ${escapeHtml(msg)}</div>`;
+  chat.appendChild(div);
+  scrollToBottom();
+}
+
+async function sendQuestion() {
+  if (isLoading) return;
+  const question = input.value.trim();
+  if (!question) return;
+
+  const tenantId = document.getElementById('tenantId').value.trim();
+  const debug = document.getElementById('debugToggle').checked;
+
+  if (!tenantId) {
+    addErrorMessage('Tenant ID is required');
+    return;
+  }
+
+  input.value = '';
+  input.style.height = 'auto';
+  isLoading = true;
+  sendBtn.disabled = true;
+
+  addUserMessage(question);
+  addLoadingMessage();
+
+  try {
+    const resp = await fetch('/v1/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        question: question,
+        top_k: 10,
+        debug: debug
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.message || `HTTP ${resp.status}: ${resp.statusText}`);
+    }
+
+    const data = await resp.json();
+    addAssistantMessage(data);
+  } catch (err) {
+    addErrorMessage(`Failed to get answer: ${err.message}`);
+  } finally {
+    isLoading = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Focus input on load
+input.focus();
+</script>
+</body>
+</html>

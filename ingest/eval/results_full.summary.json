@@ -1,0 +1,22 @@
+{
+  "mode": "full",
+  "total_questions": 40,
+  "eval_k": 10,
+  "hit_at_k": 0.0,
+  "mrr": 0.0,
+  "abstain_rate": 0.0,
+  "hits": 0,
+  "abstains": 0,
+  "errors": 40,
+  "avg_citations": 0.0,
+  "reranker_used_count": 0,
+  "avg_latency_e2e_ms": 0.0,
+  "p50_latency_e2e_ms": 0.0,
+  "p95_latency_e2e_ms": 0.0,
+  "config": {
+    "mode": "full",
+    "api_url": "http://localhost:8000",
+    "eval_k": 10,
+    "tenant_id": "00000000-0000-0000-0000-000000000001"
+  }
+}

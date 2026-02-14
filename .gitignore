@@ -21,6 +21,13 @@ build/
 .venv/
 venv/
 env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Go
+core-api-go/bin/
+core-api-go/tmp/
 
 # Node
 node_modules/
@@ -33,3 +40,17 @@ node_modules/
 # IDE
 .idea/
 *.iml
+
+# Docker
+docker-compose.override.yml
+
+# Data / artifacts
+data/artifacts/
+data/test-corpus/
+
+# Eval outputs
+eval/results.csv
+eval/results.summary.json
+
+# Postgres volume (if local)
+pgdata/

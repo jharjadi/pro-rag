@@ -15,8 +15,14 @@ Production-shaped RAG system for English-only internal knowledge base.
 ┌─────────────┐     │                                    │
 │  core-api-go │◀───│  HNSW vector index + GIN FTS      │
 │  (Go / Chi)  │     └──────────────────────────────────┘
+│              │────▶ embed-svc (question embedding)
 │              │────▶ Cohere Rerank API (fail-open)
-│              │────▶ LLM API (Anthropic/OpenAI)
+│              │────▶ LLM API (Anthropic Claude)
+└─────────────┘
+
+┌─────────────┐
+│  embed-svc   │  Lightweight Python sidecar
+│  (Flask)     │  sentence-transformers / BAAI/bge-base-en-v1.5
 └─────────────┘
 ```
 
@@ -25,6 +31,7 @@ Production-shaped RAG system for English-only internal knowledge base.
 | Service | Language | Role |
 |---------|----------|------|
 | **core-api-go** | Go / Chi | Online query runtime: hybrid retrieval, RRF merge, Cohere rerank, LLM prompting, citations, abstain |
+| **embed-svc** | Python / Flask | Embedding sidecar: wraps sentence-transformers for question embedding (used by core-api-go) |
 | **ingest** | Python | Ingestion pipeline: extract, restructure, chunk, embed, FTS, write to Postgres |
 | **postgres** | Postgres 16 + pgvector | Canonical data store: HNSW vector index, GIN FTS index |
 | **migrate** | One-shot | Runs DB migrations then exits |

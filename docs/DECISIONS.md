@@ -73,3 +73,30 @@ Architectural Decision Records (ADRs) for the pro-rag project.
 - Two Dockerfiles, two test runners (`go test` + `pytest`), two dependency ecosystems.
 - Slightly more infrastructure complexity.
 - Accepted because the contract enforcement benefit outweighs the infrastructure cost.
+
+---
+
+## ADR-005: Embedding sidecar for Go query API
+
+**Date:** 2026-02-14
+**Status:** Accepted
+
+**Context:** The Go query API needs to embed the user's question into a vector for cosine similarity search. The embedding model (BAAI/bge-base-en-v1.5) runs via Python's sentence-transformers library. Go has no native equivalent.
+
+**Decision:** Add a lightweight Python/Flask HTTP sidecar (`embed-svc`) that wraps sentence-transformers and exposes a `POST /embed` endpoint. The Go API calls this sidecar to embed questions.
+
+**Rationale:**
+- **Same model, same embeddings.** Using the same sentence-transformers model for both ingestion and query ensures embedding consistency. A different embedding API (e.g., Cohere, OpenAI) would produce different vectors incompatible with the stored embeddings.
+- **Simple HTTP contract.** `{"texts": [...]}` → `{"embeddings": [[...]]}`. Easy to test, easy to replace.
+- **Docker Compose native.** The sidecar runs as a service with a healthcheck. core-api-go depends on it via `service_healthy`.
+- **Minimal code.** ~60 lines of Flask. Model is pre-downloaded at Docker build time for fast startup.
+
+**Trade-off acknowledged:**
+- Adds one more container to the stack.
+- Adds ~10ms latency per question embedding (local HTTP call).
+- Accepted because embedding consistency is non-negotiable, and the latency is negligible compared to LLM calls (~500-1000ms).
+
+**Alternatives considered:**
+- Call Cohere/OpenAI embedding API: different model = incompatible vectors with stored BAAI/bge embeddings.
+- Embed in Go using ONNX runtime: complex setup, fragile, not worth it for V1.
+- Pre-compute question embeddings: not possible for live queries.

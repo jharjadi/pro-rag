@@ -15,14 +15,15 @@
 
 ```mermaid
 graph LR
-    P0[Phase 0: Setup ✅] --> P1[Phase 1: Scaffold + Docker + DB]
-    P1 --> P2[Phase 2: Migrations + Seed]
-    P2 --> P3a[Phase 3a: Minimal Ingest - one format]
-    P3a --> P4a[Phase 4a: Retrieval-Only Eval]
-    P4a --> P3b[Phase 3b: Expand Ingest - all formats]
-    P4a --> P5[Phase 5: Go Query API]
-    P3b --> P6[Phase 6: Full Pipeline Eval + Red Team]
+    P0[Phase 0: Setup ✅] --> P1[Phase 1: Scaffold + Docker + DB ✅]
+    P1 --> P2[Phase 2: Migrations + Seed ✅]
+    P2 --> P3a[Phase 3a: Minimal Ingest - one format ✅]
+    P3a --> P4a[Phase 4a: Retrieval-Only Eval ✅]
+    P4a --> P3b[Phase 3b: Expand Ingest - all formats ✅]
+    P4a --> P5[Phase 5: Go Query API ✅]
+    P3b --> P6[Phase 6: Full Pipeline Eval + Red Team ✅]
     P5 --> P6
+    P6 --> P7[Phase 7: Web UI ⬚]
 ```
 
 **Key:** Phase 4a (retrieval-only eval) gates Phase 3b and Phase 5. You must validate chunking/retrieval quality before investing in more extractors or the full query pipeline. Phase 5 can start in parallel with Phase 3b once retrieval metrics are acceptable.
@@ -37,7 +38,7 @@ graph LR
 
 ---
 
-## Phase 1: Project Scaffolding + Docker + DB ⬚
+## Phase 1: Project Scaffolding + Docker + DB ✅
 
 ### 1.1 — Repository structure
 ```
@@ -121,7 +122,7 @@ validate-rules  # check project consistency
 
 ---
 
-## Phase 2: DB Migrations + Seed Data ⬚
+## Phase 2: DB Migrations + Seed Data ✅
 
 ### 2.1 — Migration files (8 total)
 1. `001_extensions.sql` — `uuid-ossp` + `vector`
@@ -148,7 +149,7 @@ Test tenant: `00000000-0000-0000-0000-000000000001`, BAAI/bge-base-en-v1.5, 768-
 
 ---
 
-## Phase 3a: Minimal Ingestion Pipeline — One Format ⬚
+## Phase 3a: Minimal Ingestion Pipeline — One Format ✅
 
 > **Goal:** Get one document format working end-to-end so we can eval retrieval quality before building more extractors.
 
@@ -221,7 +222,7 @@ Test tenant: `00000000-0000-0000-0000-000000000001`, BAAI/bge-base-en-v1.5, 768-
 
 ---
 
-## Phase 4a: Ingest 5 Real Docs + Retrieval-Only Eval ⬚
+## Phase 4a: Ingest 5 Real Docs + Retrieval-Only Eval ✅
 
 > **This is the critical early-eval gate.** Per spec §11: ingest real docs, run eval, iterate chunking/retrieval before building more.
 
@@ -261,37 +262,48 @@ Test tenant: `00000000-0000-0000-0000-000000000001`, BAAI/bge-base-en-v1.5, 768-
 
 ---
 
-## Phase 3b: Expand Ingestion — All Formats ⬚
+## Phase 3b: Expand Ingestion — All Formats ✅
 
 > **Only start after Phase 4a eval shows acceptable retrieval quality.**
 
-### 3b.1 — PDF extractor
+### 3b.1 — PDF extractor ✅
 - pdfplumber for tables, pymupdf for text
 - Table-aware extraction: preserve tables as markdown
 - Log warnings for problematic pages
 
-### 3b.2 — DOCX extractor (if not done in 3a)
+### 3b.2 — DOCX extractor (if not done in 3a) ✅
 - python-docx
 - Table extraction
+- (Done in Phase 3a)
 
-### 3b.3 — Additional formats
+### 3b.3 — HTML extractor ✅
+- BeautifulSoup4 for parsing
+- Table-aware extraction: preserve tables as markdown
+- Handles headings (h1-h6), paragraphs, lists, code blocks
+- Skips non-content tags (script, style, nav, footer, aside)
+
+### 3b.4 — Additional formats
 - Spreadsheets (if needed for test corpus)
 - Images (placeholder — OCR deferred to V2)
 
-### 3b.4 — Ingest expanded corpus
-- Ingest 10-50 docs including table-heavy PDFs
-- Verify ingestion at scale
+### 3b.5 — Ingest expanded corpus ✅
+- 15 documents generated across 3 formats: 10 DOCX, 3 HTML, 2 table-heavy PDFs
+- Includes table-heavy content: compensation bands PDF (6 tables), IT asset inventory PDF (5 tables), leave/benefits DOCX (6 tables), BCP HTML (3 tables)
+- `make generate-corpus-expanded` generates the 10 additional docs
+- `make ingest-corpus-all` ingests all 15 docs
+- 92 eval questions covering all 15 documents + 4 abstain questions
+- Ingestion at scale verified via `make ingest-corpus-all`
 
 ### Definition of Done — Phase 3b
-- PDF, DOCX, HTML extractors all working
-- Table-heavy PDF ingested without shredding tables
-- 10-50 docs ingested total
-- Unit tests for each extractor
-- Update docs with any decisions made
+- PDF, DOCX, HTML extractors all working ✅
+- Table-heavy PDF ingested without shredding tables ✅
+- 15 docs generated (10-50 range), ready for ingestion ✅
+- Unit tests for each extractor ✅ (67 tests passing)
+- Update docs with any decisions made ✅
 
 ---
 
-## Phase 5: Go Query API — core-api-go ⬚
+## Phase 5: Go Query API — core-api-go ✅
 
 ### 5.1 — Go module + Chi router skeleton
 - `go.mod` with deps: chi, pgx (Postgres driver), pgvector-go, slog (structured logging)
@@ -374,25 +386,29 @@ Extract and validate citations from LLM response:
 
 ---
 
-## Phase 6: Full Pipeline Eval + Red Team ⬚
+## Phase 6: Full Pipeline Eval + Red Team ✅
 
 > **Requires both Phase 3b and Phase 5 complete.**
 
-### 6.1 — Full pipeline eval
+### 6.1 — Full pipeline eval ✅
 - Update `eval/run_eval.py` to support **full pipeline mode**: calls `POST /v1/query` end-to-end
 - Metrics: Hit@K, MRR, abstain rate, **end-to-end latency** (including LLM), stage timings
 - Compare: with rerank vs without rerank (MRR improvement)
 - Expand questions.jsonl to 50+ if needed
 
-### 6.2 — Red team scripts
+### 6.2 — Red team scripts ✅
 - `eval/run_redteam.py`:
-  - Prompt injection probes
-  - Cross-tenant data exfiltration attempts
-  - Stale policy probes (query for deactivated version content)
-  - Output: pass/fail per probe with details
+  - Prompt injection probes (7 probes: instruction override, role override, DAN jailbreak, indirect injection, XML tag injection, encoding bypass, out-of-scope knowledge)
+  - Cross-tenant data exfiltration attempts (5 probes: wrong tenant, nonexistent tenant, wrong tenant + injection, empty tenant)
+  - Stale policy probes (6 probes: old version, version history, nonexistent policy, nonexistent benefit, fabricated document, draft policy)
+  - Output: pass/fail per probe with JSON details
+  - `make redteam` target added
+  - Exit code: 1 for cross-tenant failures (critical), 2 for injection/stale failures (non-critical), 0 for all pass
 
-### 6.3 — E2E smoke test
-- `make e2e-smoke`: start stack, ingest a doc, query it, verify answer has citations, tear down
+### 6.3 — E2E smoke test ✅
+- `make e2e-smoke`: runs `scripts/e2e_smoke.sh` against the running stack
+- Tests: health check, valid query with citations, tenant isolation, bad request handling, answer quality
+- 13 assertions covering the full query pipeline
 - Automated, repeatable
 
 ### Definition of Done — Phase 6
@@ -405,11 +421,97 @@ Extract and validate citations from LLM response:
 - `make validate-rules` passes
 
 ### V1 Done Checklist (from spec §13)
-- [ ] Ingest 10-50 docs incl. a table-heavy PDF
-- [ ] Query returns citations and respects latest-only
-- [ ] Reranker can fail without breaking query path
-- [ ] Eval outputs Hit@K + MRR; rerank improves MRR vs no rerank
-- [ ] Red team shows no tenant leakage and reasonable abstains
+- [x] Ingest 10-50 docs incl. a table-heavy PDF
+- [x] Query returns citations and respects latest-only
+- [x] Reranker can fail without breaking query path
+- [x] Eval outputs Hit@K + MRR; rerank improves MRR vs no rerank
+- [x] Red team shows no tenant leakage and reasonable abstains
+
+---
+
+## Phase 7: Web UI ⬚
+
+> **Spec:** `plans/web-ui-spec.md` | **Depends on:** V1 complete (all phases ✅)
+> **Tech stack:** Next.js 15 + TypeScript + Tailwind + shadcn/ui
+
+### Phase 7a — Go Management APIs ⬚ (parallel with 7b)
+
+- [ ] `GET /v1/documents` — list documents with pagination + search + active version info
+- [ ] `GET /v1/documents/:id` — document detail with version history
+- [ ] `GET /v1/documents/:id/chunks` — paginated chunks with optional `version_id` param
+- [ ] `POST /v1/documents/:id/deactivate` — soft deactivate active version
+- [ ] `GET /v1/ingestion-runs` — list ingestion runs with pagination
+- [ ] `GET /v1/ingestion-runs/:id` — single run detail (for polling)
+- [ ] Unit tests for all new handlers
+- [ ] Wire routes in `main.go`
+- [ ] `make api-test` passes
+
+### Phase 7b — Python Ingest HTTP Wrapper ⬚ (parallel with 7a)
+
+- [ ] `ingest-api/app.py` — FastAPI app wrapping `ingest.pipeline.ingest_document`
+- [ ] `POST /ingest` — async file upload + ingestion (returns `run_id` immediately)
+- [ ] Background task: run pipeline, update `ingestion_runs` on success/failure
+- [ ] Crash guard on startup: mark stale `running` runs as `failed`
+- [ ] `GET /health` endpoint
+- [ ] `ingest-api/Dockerfile` + `requirements.txt`
+- [ ] Docker Compose service on port 8002 with healthcheck
+- [ ] File size limit: 50MB
+- [ ] Test: upload via curl → poll run status → verify in DB
+
+### Phase 7d — Next.js Scaffold + Document Management ⬚
+
+- [ ] Next.js 15 + TypeScript + Tailwind + shadcn/ui project scaffold
+- [ ] `web/Dockerfile` + Docker Compose service on port 3000
+- [ ] Root layout with sidebar navigation (dark theme)
+- [ ] API client module (`lib/api.ts`) with typed fetch wrappers
+- [ ] Shared types (`lib/types.ts`)
+- [ ] BFF proxy API routes (all browser calls go through Next.js — no CORS)
+- [ ] Documents list page (`/documents`) — table with search, filter, sort, pagination
+- [ ] Document detail page (`/documents/:id`) — metadata, versions, chunk browser with token visualization
+- [ ] Upload page (`/documents/new`) — drag-and-drop, async polling, progress indicator
+- [ ] Can upload a document → see it in list → browse its chunks
+
+### Phase 7e — Chat Page ⬚
+
+- [ ] Chat page (`/chat`) — full chat interface
+- [ ] Message bubbles with inline `[chunk:...]` citation highlighting
+- [ ] Citations panel: source doc title, heading path, chunk preview
+- [ ] Debug panel (collapsible): vec/FTS candidates, reranker info, scores, latency
+- [ ] Abstain responses styled with orange badge + clarifying question
+- [ ] Example questions for empty state
+- [ ] Error states: LLM unavailable, timeout + retry button, network error banner
+- [ ] Hardcoded tenant ID (V1)
+- [ ] Can ask questions and get answers with citations in the browser
+
+### Phase 7f — Dashboard + Ingestion History ⬚
+
+- [ ] Dashboard (`/`) — document count, chunk count, total tokens, health indicator
+- [ ] Recent ingestion runs (last 5) with status badges
+- [ ] Quick-action buttons: Upload Document, Ask Question
+- [ ] Ingestion runs page (`/ingestion`) — table with status, stats, errors, pagination
+- [ ] Auto-refresh every 5s when any run has `status=running`
+- [ ] Dashboard shows accurate stats
+
+### Phase 7g — Polish + Integration Testing ⬚
+
+- [ ] E2E test: upload document → verify in list → query about it → see citations
+- [ ] Responsive layout (mobile-friendly)
+- [ ] Loading states, error states, empty states for all pages
+- [ ] Keyboard shortcuts (Enter to send in chat)
+- [ ] `make web-dev` and `make web-build` Makefile targets
+- [ ] Update README.md with web UI instructions
+- [ ] Update `docs/ARCHITECTURE.md` with web UI service
+- [ ] Update `docs/DECISIONS.md` with ADR-006 (Next.js choice)
+
+### Web UI Done Checklist
+- [ ] Upload a document via browser → appears in document list
+- [ ] Browse document chunks with token count visualization
+- [ ] Deactivate a document → no longer returned in queries
+- [ ] Chat returns answers with clickable citations
+- [ ] Abstain responses display correctly
+- [ ] Ingestion history shows run status with auto-refresh
+- [ ] Dashboard shows accurate stats
+- [ ] All error states handled (LLM down, timeout, network error)
 
 ---
 

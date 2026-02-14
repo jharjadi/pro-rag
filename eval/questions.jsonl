@@ -1,0 +1,92 @@
+{"question": "What are the four data classification levels at Acme Corp?", "expected_doc_title": "Acme Corp IT Security Policy", "expected_abstain": false}
+{"question": "What encryption standard is required for Restricted data at rest?", "expected_doc_title": "Acme Corp IT Security Policy", "expected_abstain": false}
+{"question": "Is multi-factor authentication required for VPN remote access?", "expected_doc_title": "Acme Corp IT Security Policy", "expected_abstain": false}
+{"question": "What is the session timeout for privileged admin access?", "expected_doc_title": "Acme Corp IT Security Policy", "expected_abstain": false}
+{"question": "What is the minimum password length for legacy systems not using SSO?", "expected_doc_title": "Acme Corp IT Security Policy", "expected_abstain": false}
+{"question": "How many security zones does the Acme Corp network have?", "expected_doc_title": "Acme Corp IT Security Policy", "expected_abstain": false}
+{"question": "What endpoint detection software must be installed on all managed endpoints?", "expected_doc_title": "Acme Corp IT Security Policy", "expected_abstain": false}
+{"question": "How quickly does the SOC triage reported incidents during business hours?", "expected_doc_title": "Acme Corp IT Security Policy", "expected_abstain": false}
+{"question": "What time should new employees arrive on their first day?", "expected_doc_title": "Acme Corp Employee Onboarding Guide", "expected_abstain": false}
+{"question": "When is the security awareness training scheduled on the first day?", "expected_doc_title": "Acme Corp Employee Onboarding Guide", "expected_abstain": false}
+{"question": "What systems does a new employee get access to on Day 1?", "expected_doc_title": "Acme Corp Employee Onboarding Guide", "expected_abstain": false}
+{"question": "How much does Acme Corp contribute annually to the HSA for HDHP plan members?", "expected_doc_title": "Acme Corp Employee Onboarding Guide", "expected_abstain": false}
+{"question": "How many days of paid time off do new employees get per year?", "expected_doc_title": "Acme Corp Employee Onboarding Guide", "expected_abstain": false}
+{"question": "How long is parental leave for the primary caregiver?", "expected_doc_title": "Acme Corp Employee Onboarding Guide", "expected_abstain": false}
+{"question": "What is the annual learning and development budget per employee?", "expected_doc_title": "Acme Corp Employee Onboarding Guide", "expected_abstain": false}
+{"question": "Who is the HR onboarding contact and what is their email?", "expected_doc_title": "Acme Corp Employee Onboarding Guide", "expected_abstain": false}
+{"question": "What is the per-night hotel limit for domestic travel?", "expected_doc_title": "Acme Corp Expense Reimbursement Policy", "expected_abstain": false}
+{"question": "What is the daily meal limit for solo business travel?", "expected_doc_title": "Acme Corp Expense Reimbursement Policy", "expected_abstain": false}
+{"question": "What is the mileage reimbursement rate for personal vehicles?", "expected_doc_title": "Acme Corp Expense Reimbursement Policy", "expected_abstain": false}
+{"question": "What is the annual professional development expense limit?", "expected_doc_title": "Acme Corp Expense Reimbursement Policy", "expected_abstain": false}
+{"question": "Within how many days must expense reports be submitted after a trip?", "expected_doc_title": "Acme Corp Expense Reimbursement Policy", "expected_abstain": false}
+{"question": "What approval is needed for expenses over $5,000?", "expected_doc_title": "Acme Corp Expense Reimbursement Policy", "expected_abstain": false}
+{"question": "Is first class air travel reimbursable?", "expected_doc_title": "Acme Corp Expense Reimbursement Policy", "expected_abstain": false}
+{"question": "What percentage of expense reports are randomly audited each quarter?", "expected_doc_title": "Acme Corp Expense Reimbursement Policy", "expected_abstain": false}
+{"question": "How many days per week must hybrid employees be in the office?", "expected_doc_title": "Acme Corp Remote Work Policy", "expected_abstain": false}
+{"question": "What is the minimum internet speed required for remote workers?", "expected_doc_title": "Acme Corp Remote Work Policy", "expected_abstain": false}
+{"question": "What are the core business hours for remote employees?", "expected_doc_title": "Acme Corp Remote Work Policy", "expected_abstain": false}
+{"question": "How much is the monthly internet stipend for fully remote employees?", "expected_doc_title": "Acme Corp Remote Work Policy", "expected_abstain": false}
+{"question": "Can employees on a Performance Improvement Plan work remotely?", "expected_doc_title": "Acme Corp Remote Work Policy", "expected_abstain": false}
+{"question": "How often must fully remote employees travel to the office?", "expected_doc_title": "Acme Corp Remote Work Policy", "expected_abstain": false}
+{"question": "What is the home office setup stipend amount?", "expected_doc_title": "Acme Corp Remote Work Policy", "expected_abstain": false}
+{"question": "How many days notice is given before mandatory work arrangement changes?", "expected_doc_title": "Acme Corp Remote Work Policy", "expected_abstain": false}
+{"question": "What is the response time for a SEV-1 critical security incident?", "expected_doc_title": "Acme Corp Incident Response Procedure", "expected_abstain": false}
+{"question": "Who is the Incident Commander for security incidents?", "expected_doc_title": "Acme Corp Incident Response Procedure", "expected_abstain": false}
+{"question": "What are the five phases of incident response?", "expected_doc_title": "Acme Corp Incident Response Procedure", "expected_abstain": false}
+{"question": "How quickly must customers be notified for a SEV-1 incident?", "expected_doc_title": "Acme Corp Incident Response Procedure", "expected_abstain": false}
+{"question": "How long must incident evidence be retained?", "expected_doc_title": "Acme Corp Incident Response Procedure", "expected_abstain": false}
+{"question": "How many tabletop exercises must IRT members participate in per year?", "expected_doc_title": "Acme Corp Incident Response Procedure", "expected_abstain": false}
+{"question": "Within how many business days must a post-incident review be conducted for SEV-1 incidents?", "expected_doc_title": "Acme Corp Incident Response Procedure", "expected_abstain": false}
+{"question": "What channels can employees use to report security incidents?", "expected_doc_title": "Acme Corp Incident Response Procedure", "expected_abstain": false}
+{"question": "How many days of PTO do employees with 7-10 years tenure get?", "expected_doc_title": "Acme Corp Annual Leave & Benefits Summary", "expected_abstain": false}
+{"question": "What is the monthly premium for the PPO health plan for employee-only coverage?", "expected_doc_title": "Acme Corp Annual Leave & Benefits Summary", "expected_abstain": false}
+{"question": "What is the employer 401(k) match at Acme Corp?", "expected_doc_title": "Acme Corp Annual Leave & Benefits Summary", "expected_abstain": false}
+{"question": "How long is the 401(k) vesting schedule?", "expected_doc_title": "Acme Corp Annual Leave & Benefits Summary", "expected_abstain": false}
+{"question": "What is the basic life insurance benefit?", "expected_doc_title": "Acme Corp Annual Leave & Benefits Summary", "expected_abstain": false}
+{"question": "How much is the tuition reimbursement benefit per year?", "expected_doc_title": "Acme Corp Annual Leave & Benefits Summary", "expected_abstain": false}
+{"question": "How many approvals are required for a pull request at Acme Corp?", "expected_doc_title": "Acme Corp Software Development Lifecycle", "expected_abstain": false}
+{"question": "What is the minimum unit test coverage requirement?", "expected_doc_title": "Acme Corp Software Development Lifecycle", "expected_abstain": false}
+{"question": "How long does the team monitor after a production deployment?", "expected_doc_title": "Acme Corp Software Development Lifecycle", "expected_abstain": false}
+{"question": "How quickly must critical vulnerabilities be patched?", "expected_doc_title": "Acme Corp Software Development Lifecycle", "expected_abstain": false}
+{"question": "What tool is used for secrets management in the SDLC?", "expected_doc_title": "Acme Corp Software Development Lifecycle", "expected_abstain": false}
+{"question": "How long must financial records be retained at minimum?", "expected_doc_title": "Acme Corp Data Retention Policy", "expected_abstain": false}
+{"question": "What is the retention period for customer PII after the relationship ends?", "expected_doc_title": "Acme Corp Data Retention Policy", "expected_abstain": false}
+{"question": "How long are application logs retained?", "expected_doc_title": "Acme Corp Data Retention Policy", "expected_abstain": false}
+{"question": "What happens when a legal hold is issued?", "expected_doc_title": "Acme Corp Data Retention Policy", "expected_abstain": false}
+{"question": "How is Restricted data disposed of electronically?", "expected_doc_title": "Acme Corp Data Retention Policy", "expected_abstain": false}
+{"question": "What is the minimum contract value that requires a formal RFP for vendor selection?", "expected_doc_title": "Acme Corp Vendor Management Policy", "expected_abstain": false}
+{"question": "What SLA uptime is required for Tier 1 vendors?", "expected_doc_title": "Acme Corp Vendor Management Policy", "expected_abstain": false}
+{"question": "How quickly must Tier 1 vendors notify Acme Corp of a data breach?", "expected_doc_title": "Acme Corp Vendor Management Policy", "expected_abstain": false}
+{"question": "How often are Tier 1 vendor business reviews conducted?", "expected_doc_title": "Acme Corp Vendor Management Policy", "expected_abstain": false}
+{"question": "What insurance minimums are required for Tier 1 vendors?", "expected_doc_title": "Acme Corp Vendor Management Policy", "expected_abstain": false}
+{"question": "Is auto-forwarding company email to external accounts allowed?", "expected_doc_title": "Acme Corp Acceptable Use Policy", "expected_abstain": false}
+{"question": "What website categories are blocked by the corporate web proxy?", "expected_doc_title": "Acme Corp Acceptable Use Policy", "expected_abstain": false}
+{"question": "Is cryptocurrency mining allowed on company resources?", "expected_doc_title": "Acme Corp Acceptable Use Policy", "expected_abstain": false}
+{"question": "How long is monitoring data retained on company IT resources?", "expected_doc_title": "Acme Corp Acceptable Use Policy", "expected_abstain": false}
+{"question": "What is the RTO for the customer SaaS platform?", "expected_doc_title": "Acme Corp Business Continuity Plan", "expected_abstain": false}
+{"question": "Who is the Crisis Commander in the BCP?", "expected_doc_title": "Acme Corp Business Continuity Plan", "expected_abstain": false}
+{"question": "What is the RPO for payment processing systems?", "expected_doc_title": "Acme Corp Business Continuity Plan", "expected_abstain": false}
+{"question": "How often is the BCP tested through tabletop exercises?", "expected_doc_title": "Acme Corp Business Continuity Plan", "expected_abstain": false}
+{"question": "What AWS regions are used for DR failover?", "expected_doc_title": "Acme Corp Business Continuity Plan", "expected_abstain": false}
+{"question": "What is the base salary range for a Senior Software Engineer at Acme Corp?", "expected_doc_title": "Acme Corp Employee Compensation Bands", "expected_abstain": false}
+{"question": "What is the equity range for a Staff Software Engineer?", "expected_doc_title": "Acme Corp Employee Compensation Bands", "expected_abstain": false}
+{"question": "What geographic adjustment applies to Tier 2 locations like Boston and Austin?", "expected_doc_title": "Acme Corp Employee Compensation Bands", "expected_abstain": false}
+{"question": "What is the typical salary increase for a promotion?", "expected_doc_title": "Acme Corp Employee Compensation Bands", "expected_abstain": false}
+{"question": "What is the bonus target for a VP of Engineering?", "expected_doc_title": "Acme Corp Employee Compensation Bands", "expected_abstain": false}
+{"question": "What is the standard laptop model for engineering employees?", "expected_doc_title": "Acme Corp IT Asset Inventory Standards", "expected_abstain": false}
+{"question": "What is the refresh cycle for engineering laptops?", "expected_doc_title": "Acme Corp IT Asset Inventory Standards", "expected_abstain": false}
+{"question": "How quickly must new IT assets be registered in ITAMS?", "expected_doc_title": "Acme Corp IT Asset Inventory Standards", "expected_abstain": false}
+{"question": "What data sanitization method is used for laptop disposal?", "expected_doc_title": "Acme Corp IT Asset Inventory Standards", "expected_abstain": false}
+{"question": "How often are physical inventory audits conducted for high-value assets?", "expected_doc_title": "Acme Corp IT Asset Inventory Standards", "expected_abstain": false}
+{"question": "What is the maximum gift value allowed from vendors at Acme Corp?", "expected_doc_title": "Acme Corp Code of Conduct", "expected_abstain": false}
+{"question": "What is the ethics hotline phone number?", "expected_doc_title": "Acme Corp Code of Conduct", "expected_abstain": false}
+{"question": "Does outside employment require approval at Acme Corp?", "expected_doc_title": "Acme Corp Code of Conduct", "expected_abstain": false}
+{"question": "What happens if a manager and direct report have a romantic relationship?", "expected_doc_title": "Acme Corp Code of Conduct", "expected_abstain": false}
+{"question": "What travel risk level requires CISO and CEO approval?", "expected_doc_title": "Acme Corp Travel Safety Guidelines", "expected_abstain": false}
+{"question": "What is the 24/7 travel assistance hotline number?", "expected_doc_title": "Acme Corp Travel Safety Guidelines", "expected_abstain": false}
+{"question": "What must employees do with their travel laptop after returning from a high-risk destination?", "expected_doc_title": "Acme Corp Travel Safety Guidelines", "expected_abstain": false}
+{"question": "What type of laptop should be used for travel to medium-risk destinations?", "expected_doc_title": "Acme Corp Travel Safety Guidelines", "expected_abstain": false}
+{"question": "What is Acme Corp's policy on quantum computing research?", "expected_doc_title": "", "expected_abstain": true}
+{"question": "What is the company's stance on employee unionization?", "expected_doc_title": "", "expected_abstain": true}
+{"question": "What programming languages does Acme Corp use for mobile app development?", "expected_doc_title": "", "expected_abstain": true}
+{"question": "What is the CEO's annual salary?", "expected_doc_title": "", "expected_abstain": true}
