@@ -53,7 +53,7 @@ services:
       retries: 12
       start_period: 30s
 
-  # ── Go Query API ───────────────────────────────────────
+  # ── Go Query API (single API gateway) ──────────────────
   core-api-go:
     build:
       context: ./core-api-go
@@ -69,6 +69,7 @@ services:
       API_PORT: ${API_PORT:-8000}
       API_HOST: 0.0.0.0
       EMBED_ENDPOINT: http://embed:8001/embed
+      INGEST_API_URL: http://ingest-api:8002
       COHERE_API_KEY: ${COHERE_API_KEY:-}
       COHERE_RERANK_MODEL: ${COHERE_RERANK_MODEL:-rerank-v3.5}
       RERANK_TIMEOUT_MS: ${RERANK_TIMEOUT_MS:-3000}
@@ -90,8 +91,37 @@ services:
       - "${API_PORT:-8000}:${API_PORT:-8000}"
     volumes:
       - ./web:/web:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-  # ── Python Ingestion (on-demand) ───────────────────────
+  # ── Python Ingest API (internal only — no external port) ─
+  ingest-api:
+    build:
+      context: .
+      dockerfile: ingest-api/Dockerfile
+    container_name: prorag-ingest-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-prorag}:${POSTGRES_PASSWORD:-prorag_dev}@postgres:5432/${POSTGRES_DB:-prorag}?sslmode=disable
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-base-en-v1.5}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-768}
+      MAX_UPLOAD_SIZE_MB: 50
+    # No external ports — only reachable on Docker internal network
+    volumes:
+      - ./data:/data
+      - artifacts:/data/artifacts
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 5s
+      timeout: 10s
+      retries: 6
+
+  # ── Python Ingestion CLI (on-demand) ───────────────────
   ingest:
     build:
       context: ./ingest
@@ -116,6 +146,20 @@ services:
     volumes:
       - ./data:/data
       - artifacts:/data/artifacts
+
+  # ── Next.js Web UI ─────────────────────────────────────
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: prorag-web
+    depends_on:
+      core-api-go:
+        condition: service_healthy
+    environment:
+      API_URL: http://core-api-go:8000
+    ports:
+      - "3000:3000"
 
 volumes:
   pgdata:

@@ -45,17 +45,17 @@ graph TB
     end
 
     subgraph Backend Services
-        GO[core-api-go :8000 - queries + read APIs]
-        INGEST_API[ingest-api :8002 - file upload + ingestion]
+        GO[core-api-go :8000 - single API gateway]
+        INGEST_API[ingest-api :8002 - internal only]
         EMBED[embed-svc :8001]
         PG[Postgres]
     end
 
     PAGES -->|all API calls| API_ROUTES
-    API_ROUTES -->|queries, documents, runs| GO
-    API_ROUTES -->|file upload + ingest| INGEST_API
+    API_ROUTES -->|everything| GO
     GO -->|read| PG
     GO -->|embed questions| EMBED
+    GO -->|proxy file upload| INGEST_API
     INGEST_API -->|write| PG
 ```
 
@@ -63,9 +63,9 @@ graph TB
 
 1. **All browser API calls go through Next.js API routes (BFF proxy).** No direct browser→Go or browser→Python calls. This eliminates CORS entirely and gives us a single entry point for auth in V2.
 
-2. **Ingestion goes directly from Next.js to Python ingest-api.** The Go service is not in the ingestion path — it never was. The Option A contract says "Python writes, Go reads." Proxying writes through Go would violate the spirit of that contract and add a failure mode for no benefit.
+2. **Go is the single API gateway.** All external traffic routes through Go (:8000). The ingest-api is an internal-only service — no external port exposure, only reachable on the Docker network. Go proxies `POST /v1/ingest` to the internal ingest-api. This gives us one entry point for auth, rate limiting, logging, and audit in V2. The extra HTTP hop on the internal Docker network adds ~1-2ms to an operation that takes 10-60 seconds — negligible.
 
-3. **Async ingestion.** `POST /ingest` returns immediately with `{status: "processing", run_id: "..."}`. The UI polls `GET /v1/ingestion-runs/:id` for completion. The `ingestion_runs` table already supports this.
+3. **Async ingestion.** `POST /v1/ingest` returns immediately with `{status: "processing", run_id: "..."}`. The UI polls `GET /v1/ingestion-runs/:id` for completion. The `ingestion_runs` table already supports this.
 
 ## Pages and Features
 

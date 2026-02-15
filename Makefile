@@ -2,7 +2,8 @@
 .PHONY: help db-up db-down db-migrate db-reset db-seed db-psql \
         api-build api-run api-test \
         ingest-run ingest-test ingest-corpus ingest-corpus-all generate-corpus generate-corpus-expanded \
-        test eval eval-retrieval eval-full e2e-smoke redteam \
+        web-dev web-build web-install \
+        test eval eval-retrieval eval-full e2e-smoke e2e-web redteam \
         update-rules validate-rules
 
 # Default: show help
@@ -30,12 +31,18 @@ help:
 	@echo "    generate-corpus          Generate 5 original DOCX files"
 	@echo "    generate-corpus-expanded Generate 10 additional docs (DOCX/HTML/PDF)"
 	@echo ""
+	@echo "  Web UI (Next.js):"
+	@echo "    web-install    Install web dependencies"
+	@echo "    web-dev        Start Next.js dev server"
+	@echo "    web-build      Build Next.js for production"
+	@echo ""
 	@echo "  All:"
 	@echo "    test           Run all tests (api-test + ingest-test)"
 	@echo "    eval           Run retrieval-only evaluation (default)"
 	@echo "    eval-retrieval Run retrieval-only evaluation (DB direct)"
 	@echo "    eval-full      Run full pipeline evaluation (calls API)"
-	@echo "    e2e-smoke      End-to-end smoke test"
+	@echo "    e2e-smoke      End-to-end smoke test (API only)"
+	@echo "    e2e-web        E2E web integration test (upload → list → query → citations → deactivate)"
 	@echo "    redteam        Run red team probes (injection/exfil/stale)"
 	@echo ""
 	@echo "  Meta:"
@@ -79,6 +86,17 @@ api-run:
 
 api-test:
 	cd core-api-go && go test ./...
+
+# ── Web UI (Next.js) ────────────────────────────────────
+
+web-install:
+	cd web && npm install
+
+web-dev:
+	cd web && npm run dev
+
+web-build:
+	cd web && npm run build
 
 # ── Ingestion (Python) ──────────────────────────────────
 
@@ -154,6 +172,10 @@ eval-full:
 e2e-smoke:
 	@echo "==> Running E2E smoke test..."
 	@bash scripts/e2e_smoke.sh http://localhost:$${API_PORT:-8000}
+
+e2e-web:
+	@echo "==> Running E2E web integration test (upload → list → query → citations → deactivate)..."
+	@bash scripts/e2e_web.sh http://localhost:$${API_PORT:-8000}
 
 redteam:
 	@echo "==> Running red team probes..."

@@ -47,6 +47,9 @@ type Config struct {
 	// Embedding sidecar
 	EmbedEndpoint string
 
+	// Ingest API (internal service)
+	IngestAPIURL string
+
 	// Timeouts
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
@@ -84,6 +87,8 @@ func Load() (*Config, error) {
 		LLMMaxTokens:    envInt("LLM_MAX_TOKENS", 1024),
 
 		EmbedEndpoint: envOr("EMBED_ENDPOINT", "http://embed:8001/embed"),
+
+		IngestAPIURL: envOr("INGEST_API_URL", "http://ingest-api:8002"),
 
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 60 * time.Second, // LLM calls can be slow

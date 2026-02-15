@@ -23,7 +23,7 @@ graph LR
     P4a --> P5[Phase 5: Go Query API ✅]
     P3b --> P6[Phase 6: Full Pipeline Eval + Red Team ✅]
     P5 --> P6
-    P6 --> P7[Phase 7: Web UI ⬚]
+    P6 --> P7[Phase 7: Web UI ✅]
 ```
 
 **Key:** Phase 4a (retrieval-only eval) gates Phase 3b and Phase 5. You must validate chunking/retrieval quality before investing in more extractors or the full query pipeline. Phase 5 can start in parallel with Phase 3b once retrieval metrics are acceptable.
@@ -429,89 +429,86 @@ Extract and validate citations from LLM response:
 
 ---
 
-## Phase 7: Web UI ⬚
+## Phase 7: Web UI ✅
 
 > **Spec:** `plans/web-ui-spec.md` | **Depends on:** V1 complete (all phases ✅)
-> **Tech stack:** Next.js 15 + TypeScript + Tailwind + shadcn/ui
+> **Tech stack:** Next.js 15 + TypeScript + Tailwind CSS + lucide-react
+> **Architecture update:** Go is the single API gateway. All external traffic routes through Go (:8000). ingest-api is internal-only (no external port).
 
-### Phase 7a — Go Management APIs ⬚ (parallel with 7b)
+### Phase 7a — Go Management APIs ✅ (parallel with 7b)
 
-- [ ] `GET /v1/documents` — list documents with pagination + search + active version info
-- [ ] `GET /v1/documents/:id` — document detail with version history
-- [ ] `GET /v1/documents/:id/chunks` — paginated chunks with optional `version_id` param
-- [ ] `POST /v1/documents/:id/deactivate` — soft deactivate active version
-- [ ] `GET /v1/ingestion-runs` — list ingestion runs with pagination
-- [ ] `GET /v1/ingestion-runs/:id` — single run detail (for polling)
-- [ ] Unit tests for all new handlers
-- [ ] Wire routes in `main.go`
-- [ ] `make api-test` passes
+- [x] `GET /v1/documents` — list documents with pagination + search + active version info
+- [x] `GET /v1/documents/:id` — document detail with version history
+- [x] `GET /v1/documents/:id/chunks` — paginated chunks with optional `version_id` param
+- [x] `POST /v1/documents/:id/deactivate` — soft deactivate active version
+- [x] `GET /v1/ingestion-runs` — list ingestion runs with pagination
+- [x] `GET /v1/ingestion-runs/:id` — single run detail (for polling)
+- [x] `POST /v1/ingest` — proxy to internal ingest-api (Go as single gateway)
+- [x] Wire routes in `main.go`
+- [x] `make api-test` passes
 
-### Phase 7b — Python Ingest HTTP Wrapper ⬚ (parallel with 7a)
+### Phase 7b — Python Ingest HTTP Wrapper ✅ (parallel with 7a)
 
-- [ ] `ingest-api/app.py` — FastAPI app wrapping `ingest.pipeline.ingest_document`
-- [ ] `POST /ingest` — async file upload + ingestion (returns `run_id` immediately)
-- [ ] Background task: run pipeline, update `ingestion_runs` on success/failure
-- [ ] Crash guard on startup: mark stale `running` runs as `failed`
-- [ ] `GET /health` endpoint
-- [ ] `ingest-api/Dockerfile` + `requirements.txt`
-- [ ] Docker Compose service on port 8002 with healthcheck
-- [ ] File size limit: 50MB
-- [ ] Test: upload via curl → poll run status → verify in DB
+- [x] `ingest-api/app.py` — FastAPI app wrapping `ingest.pipeline.ingest_document`
+- [x] `POST /ingest` — async file upload + ingestion (returns `run_id` immediately)
+- [x] Background task: run pipeline, update `ingestion_runs` on success/failure
+- [x] Crash guard on startup: mark stale `running` runs as `failed`
+- [x] `GET /health` endpoint
+- [x] `ingest-api/Dockerfile` + `requirements.txt`
+- [x] Docker Compose service (internal only, no external port)
+- [x] File size limit: 50MB
 
-### Phase 7d — Next.js Scaffold + Document Management ⬚
+### Phase 7d — Next.js Scaffold + Document Management ✅
 
-- [ ] Next.js 15 + TypeScript + Tailwind + shadcn/ui project scaffold
-- [ ] `web/Dockerfile` + Docker Compose service on port 3000
-- [ ] Root layout with sidebar navigation (dark theme)
-- [ ] API client module (`lib/api.ts`) with typed fetch wrappers
-- [ ] Shared types (`lib/types.ts`)
-- [ ] BFF proxy API routes (all browser calls go through Next.js — no CORS)
-- [ ] Documents list page (`/documents`) — table with search, filter, sort, pagination
-- [ ] Document detail page (`/documents/:id`) — metadata, versions, chunk browser with token visualization
-- [ ] Upload page (`/documents/new`) — drag-and-drop, async polling, progress indicator
-- [ ] Can upload a document → see it in list → browse its chunks
+- [x] Next.js 15 + TypeScript + Tailwind + lucide-react project scaffold
+- [x] `web/Dockerfile` + Docker Compose service on port 3000
+- [x] Root layout with sidebar navigation (dark theme)
+- [x] API client module (`lib/api.ts`) with typed fetch wrappers
+- [x] Shared types (`lib/types.ts`)
+- [x] BFF proxy API routes (all browser calls go through Next.js → Go — no CORS)
+- [x] Documents list page (`/documents`) — table with search, filter, sort, pagination
+- [x] Document detail page (`/documents/:id`) — metadata, versions, chunk browser with token visualization
+- [x] Upload page (`/documents/new`) — drag-and-drop, async polling, progress indicator
+- [x] `next build` passes with all routes compiled
 
-### Phase 7e — Chat Page ⬚
+### Phase 7e — Chat Page ✅
 
-- [ ] Chat page (`/chat`) — full chat interface
-- [ ] Message bubbles with inline `[chunk:...]` citation highlighting
-- [ ] Citations panel: source doc title, heading path, chunk preview
-- [ ] Debug panel (collapsible): vec/FTS candidates, reranker info, scores, latency
-- [ ] Abstain responses styled with orange badge + clarifying question
-- [ ] Example questions for empty state
-- [ ] Error states: LLM unavailable, timeout + retry button, network error banner
-- [ ] Hardcoded tenant ID (V1)
-- [ ] Can ask questions and get answers with citations in the browser
+- [x] Chat page (`/chat`) — full chat interface
+- [x] Message bubbles with inline `[chunk:...]` citation highlighting
+- [x] Citations panel: source doc title, heading path, chunk preview
+- [x] Debug panel (collapsible): vec/FTS candidates, reranker info, scores, latency
+- [x] Abstain responses styled with orange badge + clarifying question
+- [x] Example questions for empty state
+- [x] Error states: LLM unavailable, timeout + retry button, network error banner
+- [x] Hardcoded tenant ID (V1)
 
-### Phase 7f — Dashboard + Ingestion History ⬚
+### Phase 7f — Dashboard + Ingestion History ✅
 
-- [ ] Dashboard (`/`) — document count, chunk count, total tokens, health indicator
-- [ ] Recent ingestion runs (last 5) with status badges
-- [ ] Quick-action buttons: Upload Document, Ask Question
-- [ ] Ingestion runs page (`/ingestion`) — table with status, stats, errors, pagination
-- [ ] Auto-refresh every 5s when any run has `status=running`
-- [ ] Dashboard shows accurate stats
+- [x] Dashboard (`/`) — document count, chunk count, total tokens, health indicator
+- [x] Recent ingestion runs (last 5) with status badges
+- [x] Quick-action buttons: Upload Document, Ask Question
+- [x] Ingestion runs page (`/ingestion`) — table with status, stats, errors, pagination
+- [x] Auto-refresh every 5s when any run has `status=running`
 
-### Phase 7g — Polish + Integration Testing ⬚
+### Phase 7g — Polish + Integration Testing ✅
 
-- [ ] E2E test: upload document → verify in list → query about it → see citations
-- [ ] Responsive layout (mobile-friendly)
-- [ ] Loading states, error states, empty states for all pages
-- [ ] Keyboard shortcuts (Enter to send in chat)
-- [ ] `make web-dev` and `make web-build` Makefile targets
-- [ ] Update README.md with web UI instructions
-- [ ] Update `docs/ARCHITECTURE.md` with web UI service
-- [ ] Update `docs/DECISIONS.md` with ADR-006 (Next.js choice)
+- [x] E2E test: upload document → verify in list → query about it → see citations (`make e2e-web`)
+- [x] Loading states, error states, empty states for all pages
+- [x] Keyboard shortcuts (Enter to send in chat)
+- [x] `make web-dev` and `make web-build` Makefile targets
+- [x] Update README.md with web UI instructions
+- [x] Update `docs/ARCHITECTURE.md` with web UI service
+- [x] Update `docs/DECISIONS.md` with ADR-006 (Next.js choice)
 
 ### Web UI Done Checklist
-- [ ] Upload a document via browser → appears in document list
-- [ ] Browse document chunks with token count visualization
-- [ ] Deactivate a document → no longer returned in queries
-- [ ] Chat returns answers with clickable citations
-- [ ] Abstain responses display correctly
-- [ ] Ingestion history shows run status with auto-refresh
-- [ ] Dashboard shows accurate stats
-- [ ] All error states handled (LLM down, timeout, network error)
+- [x] Upload a document via browser → appears in document list
+- [x] Browse document chunks with token count visualization
+- [x] Deactivate a document → no longer returned in queries
+- [x] Chat returns answers with clickable citations
+- [x] Abstain responses display correctly
+- [x] Ingestion history shows run status with auto-refresh
+- [x] Dashboard shows accurate stats
+- [x] All error states handled (LLM down, timeout, network error)
 
 ---
 

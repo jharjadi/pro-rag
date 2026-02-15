@@ -54,3 +54,4 @@ eval/results.summary.json
 
 # Postgres volume (if local)
 pgdata/
+.next/

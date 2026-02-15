@@ -100,3 +100,35 @@ Architectural Decision Records (ADRs) for the pro-rag project.
 - Call Cohere/OpenAI embedding API: different model = incompatible vectors with stored BAAI/bge embeddings.
 - Embed in Go using ONNX runtime: complex setup, fragile, not worth it for V1.
 - Pre-compute question embeddings: not possible for live queries.
+
+---
+
+## ADR-006: Next.js Web UI with Go as single API gateway
+
+**Date:** 2026-02-14
+**Status:** Accepted
+
+**Context:** The V1 system was API-only + CLI. Users needed `curl` to query and the Python CLI to ingest. A web UI was needed for document management, chat, and ingestion monitoring.
+
+**Decision:**
+1. **Next.js 15 (App Router) + TypeScript + Tailwind CSS** for the web UI.
+2. **Go (core-api-go) as the single API gateway** — all external traffic routes through Go (:8000).
+3. **ingest-api (FastAPI) is internal-only** — no external port, only reachable on the Docker network.
+4. **Next.js BFF proxy** — all browser API calls go through Next.js API routes → Go. No CORS needed.
+
+**Rationale:**
+- **Single gateway:** One entry point for all external traffic means auth, rate limiting, logging, and audit all live in one place when V2 adds them. The ingest-api becomes a true internal service.
+- **Next.js over SPA:** SSR, API routes for BFF proxy, file-based routing. The BFF layer eliminates CORS entirely.
+- **Next.js over single HTML file:** The old `web/index.html` was too limited for document management, file uploads, routing, and multiple pages.
+- **Go proxies ingestion:** The extra HTTP hop on the internal Docker network adds ~1-2ms to an operation that takes 10-60 seconds. The architectural clarity is worth far more.
+
+**Alternatives considered:**
+- Single HTML file served by Go: Too limited for document management, file uploads, routing.
+- Vite + React SPA: No SSR, no API routes for BFF proxy, more manual setup.
+- Next.js BFF calling both Go and Python directly: Violates single-gateway principle, complicates auth in V2.
+
+**Known V1 limitations:**
+- Chat history is client-side only (refreshing loses conversation).
+- Single tenant (hardcoded UUID).
+- Type sharing is manual (TypeScript types maintained separately from Go structs).
+- No auth (local/internal only).

@@ -63,6 +63,9 @@ func main() {
 
 	// Initialize handlers
 	queryHandler := handler.NewQueryHandler(cfg, retrievalSvc, rerankerSvc, llmSvc, embedSvc)
+	docHandler := handler.NewDocumentHandler(pool)
+	ingestionHandler := handler.NewIngestionHandler(pool)
+	ingestHandler := handler.NewIngestHandler(cfg.IngestAPIURL)
 
 	// Build router
 	r := chi.NewRouter()
@@ -85,6 +88,19 @@ func main() {
 
 	// Query endpoint
 	r.Post("/v1/query", queryHandler.Handle)
+
+	// Document management endpoints (Phase 7a)
+	r.Get("/v1/documents", docHandler.List)
+	r.Get("/v1/documents/{id}", docHandler.Get)
+	r.Get("/v1/documents/{id}/chunks", docHandler.ListChunks)
+	r.Post("/v1/documents/{id}/deactivate", docHandler.Deactivate)
+
+	// Ingestion run endpoints (Phase 7a)
+	r.Get("/v1/ingestion-runs", ingestionHandler.List)
+	r.Get("/v1/ingestion-runs/{id}", ingestionHandler.Get)
+
+	// Ingest proxy — Go as single API gateway, forwards to internal ingest-api
+	r.Post("/v1/ingest", ingestHandler.Ingest)
 
 	// Serve web UI (static files from /web directory if it exists)
 	webDir := os.Getenv("WEB_DIR")

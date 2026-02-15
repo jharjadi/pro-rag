@@ -1,0 +1,1 @@
+2026-02-14T23:34:16Z — Always use Make targets (make api-build, make api-test, make web-build) instead of raw commands (go build, go test, npm run build). DEVELOPMENT_RULES.md §0 Makefile-First is non-negotiable.

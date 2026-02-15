@@ -5,37 +5,54 @@ Production-shaped RAG (Retrieval-Augmented Generation) system for English-only i
 ## Architecture
 
 ```
-┌─────────────┐     ┌──────────────────────────────────┐
-│  ingest      │────▶│  Postgres 16 + pgvector           │
-│  (Python)    │     │  HNSW vector index + GIN FTS      │
-└─────────────┘     └──────────────────────────────────┘
-                              ▲
-┌─────────────┐               │
-│  core-api-go │───────────────┘
-│  (Go / Chi)  │────▶ embed-svc (question embedding)
+┌──────────────┐
+│  Browser     │
+│  (Next.js)   │──── http://localhost:3000
+└──────┬───────┘
+       │ BFF proxy (all API calls)
+       ▼
+┌──────────────┐     ┌──────────────────────────────────┐
+│  core-api-go │────▶│  Postgres 16 + pgvector           │
+│  (Go / Chi)  │     │  HNSW vector index + GIN FTS      │
+│  :8000       │     └──────────────────────────────────┘
+│              │────▶ embed-svc (question embedding)
 │              │────▶ Cohere Rerank API (fail-open)
 │              │────▶ Anthropic Claude (LLM)
-└─────────────┘
-
-┌─────────────┐
-│  embed-svc   │  Python sidecar — sentence-transformers
-│  (Flask)     │  BAAI/bge-base-en-v1.5 (768-dim)
-└─────────────┘
+│              │────▶ ingest-api (internal, file upload proxy)
+└──────────────┘
+       │ internal Docker network only
+       ▼
+┌──────────────┐     ┌──────────────┐
+│  ingest-api  │     │  embed-svc   │
+│  (FastAPI)   │     │  (Flask)     │
+│  :8002       │     │  :8001       │
+│  internal    │     └──────────────┘
+└──────────────┘
+       │
+       ▼
+┌──────────────┐
+│  ingest      │  Python pipeline (extract → chunk → embed → write)
+│  (Python)    │
+└──────────────┘
 ```
 
-| Service | Language | Role |
-|---------|----------|------|
-| **core-api-go** | Go / Chi | Query runtime: hybrid retrieval → RRF merge → Cohere rerank → LLM → citations |
-| **embed-svc** | Python / Flask | Embedding sidecar: wraps sentence-transformers for question embedding |
-| **ingest** | Python | Ingestion pipeline: extract (DOCX/PDF/HTML) → chunk → embed → FTS → write to Postgres |
-| **postgres** | Postgres 16 + pgvector | Canonical data store with HNSW vector index and GIN FTS index |
-| **migrate** | Shell | One-shot migration runner |
+| Service | Language | Port | Role |
+|---------|----------|------|------|
+| **web** | Next.js / React | 3000 | Web UI: dashboard, document management, chat, ingestion history |
+| **core-api-go** | Go / Chi | 8000 | **Single API gateway**: query runtime, management APIs, ingest proxy |
+| **ingest-api** | Python / FastAPI | 8002 (internal) | HTTP wrapper for ingestion pipeline (no external port) |
+| **embed-svc** | Python / Flask | 8001 | Embedding sidecar: wraps sentence-transformers for question embedding |
+| **ingest** | Python | — | CLI ingestion pipeline: extract (DOCX/PDF/HTML) → chunk → embed → FTS → write |
+| **postgres** | Postgres 16 + pgvector | 5432 | Canonical data store with HNSW vector index and GIN FTS index |
+| **migrate** | Shell | — | One-shot migration runner |
 
 ### Key Design Decisions
 
+- **Go as single API gateway**: All external traffic routes through Go (:8000). Enables single-point auth, rate limiting, and logging in V2. See [ADR-006](docs/DECISIONS.md).
 - **Two languages enforce the Option A contract**: Go reads from DB, Python writes to DB. No shared code across the boundary. See [ADR-004](docs/DECISIONS.md).
 - **Embedding sidecar**: Same model for ingestion and query ensures vector compatibility. See [ADR-005](docs/DECISIONS.md).
 - **Separate chunk_embeddings table**: Enables future re-embed migrations. See [ADR-002](docs/DECISIONS.md).
+- **ingest-api is internal-only**: No external port. Only reachable via Go proxy on the Docker network.
 
 ## Query Pipeline
 
@@ -58,6 +75,7 @@ Question → Embed → Vector Search (K=50) ─┐
 
 - Docker & Docker Compose
 - Go 1.23+ (for local `go test`)
+- Node.js 18+ (for local web UI development)
 - Python 3.11+ with venv (for ingestion + eval)
 - API keys: `ANTHROPIC_API_KEY`, `COHERE_API_KEY`
 
@@ -85,42 +103,57 @@ cd ingest && python -m venv .venv && .venv/bin/pip install -e ".[dev]" && cd ..
 # 6. Ingest all documents
 make ingest-corpus-all
 
-# 7. Start the full stack (postgres + embed-svc + core-api-go)
+# 7. Start the full stack
 docker compose up -d
 
 # 8. Open the web UI
-open http://localhost:8000
-
-# Or query via curl
-curl -s -X POST http://localhost:8000/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tenant_id": "00000000-0000-0000-0000-000000000001",
-    "question": "What is the password policy?",
-    "top_k": 10,
-    "debug": true
-  }' | python3 -m json.tool
+open http://localhost:3000
 ```
 
 ## Web UI
 
-Navigate to `http://localhost:8000` in your browser to use the chat interface. Features:
+The web UI is a Next.js application at `http://localhost:3000`. All API calls go through BFF proxy routes to the Go gateway at `:8000`.
 
-- **Chat interface** — type questions and get answers with inline citation markers
-- **Example questions** — click to try pre-built queries
-- **Citations panel** — shows source documents and heading paths for each citation
-- **Debug toggle** — enable to see retrieval stats (vec/FTS candidates, reranker info, context tokens)
-- **Tenant selector** — configurable tenant ID in the header
+### Pages
 
-The UI is a single HTML file ([`web/index.html`](web/index.html)) served by the Go API. No build step required.
+| Page | URL | Description |
+|------|-----|-------------|
+| **Dashboard** | `/` | System stats, recent ingestion runs, quick actions, health indicator |
+| **Documents** | `/documents` | Searchable document list with pagination, active version info |
+| **Document Detail** | `/documents/:id` | Version history, chunk browser with token counts, deactivate action |
+| **Upload** | `/documents/new` | Drag-and-drop file upload (DOCX, PDF, HTML), async with progress polling |
+| **Chat** | `/chat` | Full chat interface with citations, debug panel, abstain styling |
+| **Ingestion History** | `/ingestion` | Ingestion runs table with status, duration, auto-refresh for running jobs |
+
+### Local Development
+
+```bash
+# Install dependencies
+make web-install
+
+# Start dev server (requires core-api-go running on :8000)
+make web-dev
+
+# Production build
+make web-build
+```
+
+### Docker (Production)
+
+The web service is included in `docker-compose.yml` and starts automatically with `docker compose up -d`.
 
 ## API
 
-### `GET /health`
+All API endpoints are served by the Go gateway at `:8000`.
 
+### Health
+
+#### `GET /health`
 Returns `{"status":"ok"}` when the service is healthy.
 
-### `POST /v1/query`
+### Query
+
+#### `POST /v1/query`
 
 **Request:**
 ```json
@@ -161,6 +194,23 @@ Returns `{"status":"ok"}` when the service is healthy.
 
 **Error responses:** `400` (bad request), `500` (internal error), `502` (LLM unavailable).
 
+### Document Management
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/v1/documents?tenant_id=...&page=1&limit=20&search=...` | List documents with pagination and search |
+| `GET` | `/v1/documents/:id?tenant_id=...` | Document detail with version history and chunk stats |
+| `GET` | `/v1/documents/:id/chunks?tenant_id=...&page=1&limit=50` | List chunks for a document |
+| `POST` | `/v1/documents/:id/deactivate?tenant_id=...` | Soft-deactivate a document |
+
+### Ingestion
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/v1/ingest` | Upload file (multipart form) — proxied to internal ingest-api |
+| `GET` | `/v1/ingestion-runs?tenant_id=...&page=1&limit=20` | List ingestion runs |
+| `GET` | `/v1/ingestion-runs/:id?tenant_id=...` | Get single ingestion run detail |
+
 ## Make Targets
 
 ### Database
@@ -180,6 +230,13 @@ Returns `{"status":"ok"}` when the service is healthy.
 | `make api-run` | Start core-api-go via Docker Compose |
 | `make api-test` | Run Go tests (`go test ./...`) |
 
+### Web UI (Next.js)
+| Target | Description |
+|--------|-------------|
+| `make web-install` | Install web dependencies (`npm install`) |
+| `make web-dev` | Start Next.js dev server |
+| `make web-build` | Build Next.js for production |
+
 ### Ingestion (Python)
 | Target | Description |
 |--------|-------------|
@@ -197,7 +254,8 @@ Returns `{"status":"ok"}` when the service is healthy.
 | `make eval` | Run retrieval-only evaluation (default) |
 | `make eval-retrieval` | Run retrieval-only evaluation (DB direct) |
 | `make eval-full` | Run full pipeline evaluation (calls API) |
-| `make e2e-smoke` | End-to-end smoke test (13 assertions) |
+| `make e2e-smoke` | End-to-end smoke test — API only (13 assertions) |
+| `make e2e-web` | E2E web integration test — upload → list → query → citations → deactivate |
 | `make redteam` | Red team probes (injection/exfil/stale) |
 
 ### Meta
@@ -222,6 +280,7 @@ Key settings:
 | `MAX_CONTEXT_TOKENS` | 6000 | Max tokens in LLM context window |
 | `MAX_CONTEXT_CHUNKS` | 12 | Max chunks sent to LLM |
 | `RERANK_FAIL_OPEN` | true | Continue without reranker on failure |
+| `INGEST_API_URL` | `http://ingest-api:8002` | Internal ingest-api URL (Go proxy target) |
 
 ## Domain Rules
 
@@ -235,15 +294,24 @@ Key settings:
 
 ```
 pro-rag/
-├── core-api-go/          # Go query runtime (Chi router)
+├── core-api-go/          # Go API gateway (Chi router)
 │   ├── cmd/server/       # main.go — HTTP server with graceful shutdown
 │   ├── internal/
 │   │   ├── config/       # Environment variable loading
 │   │   ├── db/           # pgx connection pool + startup checks
-│   │   ├── handler/      # HTTP handlers (POST /v1/query)
+│   │   ├── handler/      # HTTP handlers (query, documents, ingestion, ingest proxy)
 │   │   ├── model/        # Request/response types, query log
 │   │   └── service/      # Business logic (retrieval, rerank, RRF, abstain, context, LLM, citations, prompt)
 │   └── tests/
+├── web/                  # Next.js web UI
+│   ├── app/              # App Router pages (dashboard, documents, chat, ingestion)
+│   │   ├── api/          # BFF proxy routes (all traffic → Go :8000)
+│   │   ├── chat/         # Chat page
+│   │   ├── documents/    # Document list, detail, upload pages
+│   │   └── ingestion/    # Ingestion history page
+│   ├── components/       # Shared React components (sidebar)
+│   └── lib/              # API client, types, utilities
+├── ingest-api/           # Python ingest HTTP wrapper (FastAPI, internal-only)
 ├── embed-svc/            # Python embedding sidecar (Flask)
 ├── ingest/               # Python ingestion pipeline
 │   ├── ingest/
@@ -259,7 +327,6 @@ pro-rag/
 │   ├── questions.jsonl   # 92 eval questions
 │   ├── run_eval.py       # Hit@K, MRR, abstain rate, latency
 │   └── run_redteam.py    # Injection, exfil, stale probes
-├── web/                  # Chat UI (single HTML file, served by Go API)
 ├── scripts/              # Corpus generators + E2E smoke test
 ├── data/                 # Test corpus (generated)
 ├── docs/                 # ARCHITECTURE.md, DECISIONS.md, project notes
@@ -270,8 +337,9 @@ pro-rag/
 
 - [`plans/ragstack_rag_poc_spec_v7.md`](plans/ragstack_rag_poc_spec_v7.md) — Full V1 specification
 - [`plans/implementation-plan.md`](plans/implementation-plan.md) — Implementation plan with phase tracking
+- [`plans/web-ui-spec.md`](plans/web-ui-spec.md) — Web UI implementation spec
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Architecture overview
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) — Architectural Decision Records (ADR-001 through ADR-005)
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — Architectural Decision Records (ADR-001 through ADR-006)
 - [`docs/project-notes/phase4a-retrieval-eval.md`](docs/project-notes/phase4a-retrieval-eval.md) — Phase 4a retrieval eval results
 - [`DEVELOPMENT_RULES.md`](DEVELOPMENT_RULES.md) — Development workflow rules
 
