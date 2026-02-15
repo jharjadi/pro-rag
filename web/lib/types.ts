@@ -75,8 +75,11 @@ export interface DeactivateResponse {
 
 export interface IngestionRunItem {
   run_id: string;
-  status: "running" | "succeeded" | "failed";
-  started_at: string;
+  doc_id: string | null;
+  status: "queued" | "running" | "succeeded" | "failed";
+  run_type: string;
+  created_at: string;
+  started_at: string | null;
   finished_at: string | null;
   duration_ms: number | null;
   config: Record<string, unknown>;
@@ -96,9 +99,10 @@ export interface IngestionRunListResponse {
 }
 
 export interface IngestResponse {
-  status: string;
-  run_id: string;
+  run_id?: string;
   doc_id: string;
+  status: string;
+  reason?: string;
 }
 
 // ── Query ────────────────────────────────────────────────

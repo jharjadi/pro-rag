@@ -9,8 +9,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
+	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/jharjadi/pro-rag/core-api-go/internal/config"
+	authmw "github.com/jharjadi/pro-rag/core-api-go/internal/middleware"
 	"github.com/jharjadi/pro-rag/core-api-go/internal/model"
 	"github.com/jharjadi/pro-rag/core-api-go/internal/service"
 )
@@ -48,7 +49,14 @@ func (h *QueryHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	totalStart := time.Now()
 
 	// Get request ID from chi middleware
-	requestID := middleware.GetReqID(ctx)
+	requestID := chimw.GetReqID(ctx)
+
+	// tenant_id from auth middleware context (spec v2.3 §2.1)
+	tenantID := authmw.TenantIDFromContext(ctx)
+	if tenantID == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id is required")
+		return
+	}
 
 	// Parse request
 	var req model.QueryRequest
@@ -57,11 +65,9 @@ func (h *QueryHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate required fields
-	if req.TenantID == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id is required")
-		return
-	}
+	// Override tenant_id from context (never trust client payload)
+	req.TenantID = tenantID
+
 	if req.Question == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "question is required")
 		return

@@ -22,11 +22,13 @@ var requiredExtensions = []string{"uuid-ossp", "vector"}
 // requiredTables that must exist for the query API to function.
 var requiredTables = []string{
 	"tenants",
+	"users",
 	"documents",
 	"document_versions",
 	"chunks",
 	"chunk_embeddings",
 	"chunk_fts",
+	"ingestion_runs",
 }
 
 // Connect creates a pgx connection pool with retry logic.

@@ -19,9 +19,10 @@ export default function UploadPage() {
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<
-    "idle" | "uploading" | "processing" | "succeeded" | "failed"
+    "idle" | "uploading" | "processing" | "succeeded" | "skipped" | "failed"
   >("idle");
   const [runId, setRunId] = useState<string | null>(null);
+  const [skipReason, setSkipReason] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFile = (f: File) => {
@@ -82,14 +83,25 @@ export default function UploadPage() {
     setUploading(true);
     setStatus("uploading");
     setError(null);
+    setSkipReason(null);
 
     try {
       const res = await uploadDocument(file, title);
-      setRunId(res.run_id);
+
+      if (res.status === "skipped") {
+        // Dedup: already ingested with same content
+        setStatus("skipped");
+        setSkipReason(res.reason ?? "Already ingested, no changes");
+        return;
+      }
+
+      setRunId(res.run_id ?? null);
       setStatus("processing");
 
       // Poll for completion
-      await pollRunStatus(res.run_id);
+      if (res.run_id) {
+        await pollRunStatus(res.run_id);
+      }
     } catch (err: unknown) {
       setStatus("failed");
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -197,10 +209,27 @@ export default function UploadPage() {
         </div>
       )}
 
+      {status === "skipped" && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-yellow-400" />
+          <div>
+            <p className="text-sm text-yellow-400">
+              {skipReason || "Already ingested, no changes"}
+            </p>
+            <Link
+              href="/documents"
+              className="text-xs text-accent hover:underline mt-1 inline-block"
+            >
+              View in document list →
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Submit button */}
       <button
         onClick={handleSubmit}
-        disabled={!file || !title || uploading || status === "succeeded"}
+        disabled={!file || !title || uploading || status === "succeeded" || status === "skipped"}
         className="w-full px-4 py-2.5 bg-accent text-background rounded-lg text-sm font-medium hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
       >
         {uploading ? (

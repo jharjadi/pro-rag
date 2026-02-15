@@ -165,6 +165,7 @@ type VersionDetail struct {
 	VersionLabel string    `json:"version_label"`
 	IsActive     bool      `json:"is_active"`
 	EffectiveAt  time.Time `json:"effective_at"`
+	ContentHash  string    `json:"content_hash"`
 	ChunkCount   int       `json:"chunk_count"`
 	TotalTokens  int       `json:"total_tokens"`
 	CreatedAt    time.Time `json:"created_at"`
@@ -210,8 +211,11 @@ type DeactivateResponse struct {
 // IngestionRunItem represents an ingestion run in list/detail responses.
 type IngestionRunItem struct {
 	RunID      string          `json:"run_id"`
+	DocID      *string         `json:"doc_id"`
 	Status     string          `json:"status"`
-	StartedAt  time.Time       `json:"started_at"`
+	RunType    string          `json:"run_type"`
+	CreatedAt  time.Time       `json:"created_at"`
+	StartedAt  *time.Time      `json:"started_at"`
 	FinishedAt *time.Time      `json:"finished_at"`
 	DurationMS *int64          `json:"duration_ms"`
 	Config     json.RawMessage `json:"config"`

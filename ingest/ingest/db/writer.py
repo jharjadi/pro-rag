@@ -7,10 +7,14 @@ Handles:
 - All writes within a single transaction
 - Ingestion run tracking
 
+Schema notes (post-migration 010):
+- content_hash lives on document_versions, NOT documents.
+- documents table has unique(tenant_id, source_uri) for dedup.
+- Tenant isolation: every write includes tenant_id.
+
 Spec references:
 - Version activation: §3a.6
-- content_hash dedup: §3a.6
-- Tenant isolation: every write includes tenant_id
+- content_hash dedup: §3a.6, spec v2.3 §9.1–§9.2
 """
 
 from __future__ import annotations
@@ -46,20 +50,23 @@ def check_existing_document(
 ) -> dict[str, Any] | None:
     """Check if a document with the same source_uri exists for this tenant.
 
+    content_hash is now on document_versions (migration 010), so we join
+    to the active version to get the current hash.
+
     Returns:
         Dict with doc_id, content_hash, has_active_version info, or None if not found.
     """
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT d.doc_id, d.content_hash,
-                   EXISTS(
-                       SELECT 1 FROM document_versions dv
-                       WHERE dv.doc_id = d.doc_id
-                         AND dv.tenant_id = d.tenant_id
-                         AND dv.is_active = true
-                   ) as has_active_version
+            SELECT d.doc_id,
+                   dv.content_hash,
+                   (dv.doc_version_id IS NOT NULL) AS has_active_version
             FROM documents d
+            LEFT JOIN document_versions dv
+                   ON dv.doc_id = d.doc_id
+                  AND dv.tenant_id = d.tenant_id
+                  AND dv.is_active = true
             WHERE d.tenant_id = %s AND d.source_uri = %s
             ORDER BY d.created_at DESC
             LIMIT 1
@@ -71,7 +78,7 @@ def check_existing_document(
             return None
         return {
             "doc_id": str(row[0]),
-            "content_hash": row[1],
+            "content_hash": row[1],          # may be None if no active version
             "has_active_version": row[2],
         }
 
@@ -96,6 +103,8 @@ def write_document(
     1. content_hash dedup: skip if same (tenant, source_uri, content_hash) already active
     2. New document: create doc + version + chunks + embeddings + FTS
     3. New version: deactivate old version, create new version + chunks + embeddings + FTS
+
+    Schema note: content_hash is stored on document_versions (not documents).
 
     Args:
         conn: psycopg2 connection.
@@ -146,12 +155,6 @@ def write_document(
                 # Existing document — new version
                 doc_id = existing["doc_id"]
 
-                # Update content_hash on the document
-                cur.execute(
-                    "UPDATE documents SET content_hash = %s WHERE doc_id = %s AND tenant_id = %s",
-                    (content_hash, doc_id, tenant_id),
-                )
-
                 if activate:
                     # Deactivate old version(s)
                     cur.execute(
@@ -164,25 +167,27 @@ def write_document(
                     )
                     logger.info("Deactivated old version(s) for doc_id=%s", doc_id)
             else:
-                # New document
+                # New document (no content_hash on documents table anymore)
                 doc_id = str(uuid.uuid4())
                 cur.execute(
                     """
-                    INSERT INTO documents (doc_id, tenant_id, source_type, source_uri, title, content_hash)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO documents (doc_id, tenant_id, source_type, source_uri, title)
+                    VALUES (%s, %s, %s, %s, %s)
                     """,
-                    (doc_id, tenant_id, source_type, source_uri, title, content_hash),
+                    (doc_id, tenant_id, source_type, source_uri, title),
                 )
 
-            # Create document version
+            # Create document version (content_hash lives here now)
             doc_version_id = str(uuid.uuid4())
             cur.execute(
                 """
                 INSERT INTO document_versions
-                    (doc_version_id, tenant_id, doc_id, version_label, is_active, extracted_artifact_uri)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                    (doc_version_id, tenant_id, doc_id, version_label, is_active,
+                     content_hash, extracted_artifact_uri)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                (doc_version_id, tenant_id, doc_id, version_label, activate, artifact_uri),
+                (doc_version_id, tenant_id, doc_id, version_label, activate,
+                 content_hash, artifact_uri),
             )
 
             # Insert chunks, embeddings, and FTS
@@ -255,6 +260,9 @@ def create_ingestion_run(
 ) -> str:
     """Create an ingestion_runs row with status='running'.
 
+    Used by the CLI path. The Go-orchestrated path creates runs with
+    status='queued' directly.
+
     Returns:
         run_id (UUID string).
     """
@@ -262,8 +270,8 @@ def create_ingestion_run(
     with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO ingestion_runs (run_id, tenant_id, status, config)
-            VALUES (%s, %s, 'running', %s)
+            INSERT INTO ingestion_runs (run_id, tenant_id, status, started_at, config)
+            VALUES (%s, %s, 'running', now(), %s)
             """,
             (run_id, tenant_id, json.dumps(config or {})),
         )
@@ -284,6 +292,7 @@ def update_ingestion_run_success(
             UPDATE ingestion_runs
             SET status = 'succeeded',
                 finished_at = now(),
+                updated_at = now(),
                 stats = %s
             WHERE run_id = %s
             """,
@@ -307,6 +316,7 @@ def update_ingestion_run_failure(
             UPDATE ingestion_runs
             SET status = 'failed',
                 finished_at = now(),
+                updated_at = now(),
                 error = %s
             WHERE run_id = %s
             """,

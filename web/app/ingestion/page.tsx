@@ -30,10 +30,10 @@ export default function IngestionPage() {
     load();
   }, [load]);
 
-  // Auto-refresh when any run is "running"
+  // Auto-refresh when any run is "running" or "queued"
   useEffect(() => {
-    const hasRunning = runs.some((r) => r.status === "running");
-    if (!hasRunning) return;
+    const hasActive = runs.some((r) => r.status === "running" || r.status === "queued");
+    if (!hasActive) return;
 
     const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
@@ -45,7 +45,7 @@ export default function IngestionPage() {
     <div className="p-8 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Ingestion Runs</h1>
-        {runs.some((r) => r.status === "running") && (
+        {runs.some((r) => r.status === "running" || r.status === "queued") && (
           <span className="flex items-center gap-2 text-xs text-blue-400">
             <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
             Auto-refreshing...
@@ -68,7 +68,7 @@ export default function IngestionPage() {
                 <th className="px-4 py-3 font-medium w-8"></th>
                 <th className="px-4 py-3 font-medium">Run ID</th>
                 <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Started</th>
+                <th className="px-4 py-3 font-medium">Created</th>
                 <th className="px-4 py-3 font-medium">Duration</th>
                 <th className="px-4 py-3 font-medium">Docs</th>
                 <th className="px-4 py-3 font-medium">Chunks</th>
@@ -104,12 +104,12 @@ export default function IngestionPage() {
                       <StatusBadge status={run.status} />
                     </td>
                     <td className="px-4 py-3 text-text-dim">
-                      {formatDate(run.started_at)}
+                      {formatDate(run.started_at ?? run.created_at)}
                     </td>
                     <td className="px-4 py-3 text-text-dim">
                       {run.duration_ms != null
                         ? formatDuration(run.duration_ms)
-                        : run.status === "running"
+                        : run.status === "running" || run.status === "queued"
                         ? "..."
                         : "-"}
                     </td>
@@ -131,6 +131,16 @@ export default function IngestionPage() {
                             <span className="text-text-dim">Full Run ID: </span>
                             <span className="font-mono">{run.run_id}</span>
                           </div>
+                          <div>
+                            <span className="text-text-dim">Created: </span>
+                            <span>{formatDate(run.created_at)}</span>
+                          </div>
+                          {run.started_at && (
+                            <div>
+                              <span className="text-text-dim">Started: </span>
+                              <span>{formatDate(run.started_at)}</span>
+                            </div>
+                          )}
                           {run.finished_at && (
                             <div>
                               <span className="text-text-dim">Finished: </span>
@@ -198,6 +208,7 @@ export default function IngestionPage() {
 
 function StatusBadge({ status }: { status: string }) {
   const styles = {
+    queued: "bg-yellow-500/20 text-yellow-400",
     running: "bg-blue-500/20 text-blue-400",
     succeeded: "bg-green-500/20 text-green-400",
     failed: "bg-red-500/20 text-red-400",

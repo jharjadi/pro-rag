@@ -119,7 +119,7 @@ export default function DashboardPage() {
               <thead>
                 <tr className="border-b border-border text-text-dim text-left">
                   <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium">Started</th>
+                  <th className="px-4 py-2 font-medium">Created</th>
                   <th className="px-4 py-2 font-medium">Chunks</th>
                   <th className="px-4 py-2 font-medium">Tokens</th>
                 </tr>
@@ -131,7 +131,7 @@ export default function DashboardPage() {
                       <StatusBadge status={run.status} />
                     </td>
                     <td className="px-4 py-2 text-text-dim">
-                      {formatDate(run.started_at)}
+                      {formatDate(run.started_at ?? run.created_at)}
                     </td>
                     <td className="px-4 py-2">
                       {run.stats?.chunks_created ?? "-"}
@@ -172,6 +172,7 @@ function StatCard({
 
 function StatusBadge({ status }: { status: string }) {
   const styles = {
+    queued: "bg-yellow-500/20 text-yellow-400",
     running: "bg-blue-500/20 text-blue-400",
     succeeded: "bg-green-500/20 text-green-400",
     failed: "bg-red-500/20 text-red-400",

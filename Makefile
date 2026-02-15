@@ -1,8 +1,10 @@
 # pro-rag Makefile — CLI-first, Makefile-first (DEVELOPMENT_RULES.md §0)
 .PHONY: help db-up db-down db-migrate db-reset db-seed db-psql \
         api-build api-run api-test \
+        worker-build worker-run worker-logs \
         ingest-run ingest-test ingest-corpus ingest-corpus-all generate-corpus generate-corpus-expanded \
         web-dev web-build web-install \
+        stack-up stack-down stack-build \
         test eval eval-retrieval eval-full e2e-smoke e2e-web redteam \
         update-rules validate-rules
 
@@ -14,8 +16,8 @@ help:
 	@echo "    db-up          Start Postgres (pgvector)"
 	@echo "    db-down        Stop all services + remove containers"
 	@echo "    db-migrate     Run SQL migrations"
-	@echo "    db-reset       Destroy DB volume + recreate + migrate"
-	@echo "    db-seed        Seed test tenant"
+	@echo "    db-reset       Destroy DB volume + recreate + migrate + seed"
+	@echo "    db-seed        Seed test tenant + admin user"
 	@echo "    db-psql        Open psql shell"
 	@echo ""
 	@echo "  Query API (Go):"
@@ -23,8 +25,13 @@ help:
 	@echo "    api-run        Start core-api-go via Docker Compose"
 	@echo "    api-test       Run Go tests"
 	@echo ""
-	@echo "  Ingestion (Python):"
-	@echo "    ingest-run     Run ingestion pipeline"
+	@echo "  Ingest Worker (Python — spec v2.3):"
+	@echo "    worker-build   Build ingest-worker Docker image"
+	@echo "    worker-run     Start ingest-worker via Docker Compose"
+	@echo "    worker-logs    Tail ingest-worker logs"
+	@echo ""
+	@echo "  Ingestion CLI (Python):"
+	@echo "    ingest-run     Run ingestion pipeline (CLI)"
 	@echo "    ingest-test    Run Python tests"
 	@echo "    ingest-corpus      Ingest 5 original test corpus docs"
 	@echo "    ingest-corpus-all  Ingest all 15 expanded corpus docs"
@@ -35,6 +42,11 @@ help:
 	@echo "    web-install    Install web dependencies"
 	@echo "    web-dev        Start Next.js dev server"
 	@echo "    web-build      Build Next.js for production"
+	@echo ""
+	@echo "  Stack (full):"
+	@echo "    stack-up       Start all services (postgres + migrate + embed + api + worker + web)"
+	@echo "    stack-down     Stop all services + remove containers"
+	@echo "    stack-build    Build all Docker images"
 	@echo ""
 	@echo "  All:"
 	@echo "    test           Run all tests (api-test + ingest-test)"
@@ -67,7 +79,8 @@ db-reset:
 	@echo "==> Waiting for Postgres to be healthy..."
 	@sleep 3
 	docker compose run --rm migrate
-	@echo "==> DB reset complete."
+	$(MAKE) db-seed
+	@echo "==> DB reset complete (migrated + seeded)."
 
 db-seed:
 	docker compose exec postgres psql -U $${POSTGRES_USER:-prorag} -d $${POSTGRES_DB:-prorag} -f /dev/stdin < migrations/seed.sql
@@ -87,6 +100,17 @@ api-run:
 api-test:
 	cd core-api-go && go test ./...
 
+# ── Ingest Worker (Python — spec v2.3) ──────────────────
+
+worker-build:
+	docker compose build ingest-worker
+
+worker-run:
+	docker compose up ingest-worker
+
+worker-logs:
+	docker compose logs -f ingest-worker
+
 # ── Web UI (Next.js) ────────────────────────────────────
 
 web-install:
@@ -98,7 +122,20 @@ web-dev:
 web-build:
 	cd web && npm run build
 
-# ── Ingestion (Python) ──────────────────────────────────
+# ── Stack (full) ────────────────────────────────────────
+
+stack-up:
+	docker compose up -d
+	@echo "==> All services starting. Use 'docker compose ps' to check status."
+
+stack-down:
+	docker compose down
+
+stack-build:
+	docker compose build
+	@echo "==> All images built."
+
+# ── Ingestion CLI (Python) ──────────────────────────────
 
 ingest-run:
 	docker compose run --rm ingest

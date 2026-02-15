@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/jharjadi/pro-rag/core-api-go/internal/config"
 	"github.com/jharjadi/pro-rag/core-api-go/internal/db"
 	"github.com/jharjadi/pro-rag/core-api-go/internal/handler"
+	authmw "github.com/jharjadi/pro-rag/core-api-go/internal/middleware"
 	"github.com/jharjadi/pro-rag/core-api-go/internal/service"
 )
 
@@ -44,7 +45,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Run crash guard — mark stale queued/running ingestion runs as failed (spec v2.3 §11.1)
+	if err := db.RunCrashGuard(ctx, pool, cfg.CrashGuardQueuedTTLHours, cfg.CrashGuardRunningStaleMin); err != nil {
+		slog.Error("crash guard failed", "error", err)
+		// Non-fatal — continue startup
+	}
+
 	// Initialize services
+	authSvc := service.NewAuthService(cfg.JWTSecret, cfg.JWTExpiryHours)
 	retrievalSvc := service.NewRetrievalService(pool)
 	rerankerSvc := service.NewRerankerService(
 		cfg.CohereAPIKey,
@@ -62,18 +70,19 @@ func main() {
 	embedSvc := service.NewEmbedService(cfg.EmbedEndpoint)
 
 	// Initialize handlers
+	authHandler := handler.NewAuthHandler(pool, authSvc)
 	queryHandler := handler.NewQueryHandler(cfg, retrievalSvc, rerankerSvc, llmSvc, embedSvc)
 	docHandler := handler.NewDocumentHandler(pool)
 	ingestionHandler := handler.NewIngestionHandler(pool)
-	ingestHandler := handler.NewIngestHandler(cfg.IngestAPIURL)
+	ingestHandler := handler.NewIngestHandler(cfg, pool)
 
 	// Build router
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Recoverer)
+	r.Use(chimw.RequestID)
+	r.Use(chimw.RealIP)
+	r.Use(chimw.Recoverer)
 
-	// Health check
+	// Health check (no auth required)
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		if err := pool.Ping(r.Context()); err != nil {
 			w.Header().Set("Content-Type", "application/json")
@@ -86,21 +95,34 @@ func main() {
 		fmt.Fprintf(w, `{"status":"ok"}`)
 	})
 
-	// Query endpoint
-	r.Post("/v1/query", queryHandler.Handle)
+	// Auth endpoints (no auth required — these issue tokens)
+	r.Post("/v1/auth/login", authHandler.Login)
 
-	// Document management endpoints (Phase 7a)
-	r.Get("/v1/documents", docHandler.List)
-	r.Get("/v1/documents/{id}", docHandler.Get)
-	r.Get("/v1/documents/{id}/chunks", docHandler.ListChunks)
-	r.Post("/v1/documents/{id}/deactivate", docHandler.Deactivate)
+	// Protected endpoints — require auth (JWT when AUTH_ENABLED=true, tenant_id param when false)
+	r.Group(func(r chi.Router) {
+		r.Use(authmw.AuthMiddleware(authSvc, cfg.AuthEnabled))
 
-	// Ingestion run endpoints (Phase 7a)
-	r.Get("/v1/ingestion-runs", ingestionHandler.List)
-	r.Get("/v1/ingestion-runs/{id}", ingestionHandler.Get)
+		// Query endpoint
+		r.Post("/v1/query", queryHandler.Handle)
 
-	// Ingest proxy — Go as single API gateway, forwards to internal ingest-api
-	r.Post("/v1/ingest", ingestHandler.Ingest)
+		// Document management endpoints
+		r.Get("/v1/documents", docHandler.List)
+		r.Get("/v1/documents/{id}", docHandler.Get)
+		r.Get("/v1/documents/{id}/chunks", docHandler.ListChunks)
+
+		// Ingestion run endpoints
+		r.Get("/v1/ingestion-runs", ingestionHandler.List)
+		r.Get("/v1/ingestion-runs/{id}", ingestionHandler.Get)
+
+		// Upload + ingest
+		r.Post("/v1/ingest", ingestHandler.Ingest)
+
+		// Admin-only endpoints (require admin role)
+		r.Group(func(r chi.Router) {
+			r.Use(authmw.RequireRole("admin"))
+			r.Post("/v1/documents/{id}/deactivate", docHandler.Deactivate)
+		})
+	})
 
 	// Serve web UI (static files from /web directory if it exists)
 	webDir := os.Getenv("WEB_DIR")
@@ -121,6 +143,11 @@ func main() {
 	} else {
 		slog.Info("web UI not available", "dir", webDir, "reason", "directory not found")
 	}
+
+	slog.Info("auth configuration",
+		"auth_enabled", cfg.AuthEnabled,
+		"jwt_expiry_hours", cfg.JWTExpiryHours,
+	)
 
 	srv := &http.Server{
 		Addr:         cfg.Addr(),

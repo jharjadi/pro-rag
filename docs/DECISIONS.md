@@ -132,3 +132,57 @@ Architectural Decision Records (ADRs) for the pro-rag project.
 - Single tenant (hardcoded UUID).
 - Type sharing is manual (TypeScript types maintained separately from Go structs).
 - No auth (local/internal only).
+
+---
+
+## ADR-007: Go-orchestrated ingestion with Python worker (spec v2.3)
+
+**Date:** 2026-02-15
+**Status:** Accepted (supersedes ingest-api proxy pattern from ADR-006)
+
+**Context:** The original architecture had Go proxy file uploads to `ingest-api` (FastAPI), which handled everything: file storage, document creation, run tracking, and pipeline execution. This meant Python owned all write paths, and Go was a dumb proxy for ingestion. This created problems:
+- No content-addressed dedup (Go couldn't inspect the file before forwarding).
+- No crash recovery (if ingest-api died mid-job, runs stayed "running" forever).
+- No separation between orchestration (who/what/when) and processing (extract/chunk/embed).
+- Go couldn't enforce upload limits or compute file hashes without buffering the entire file.
+
+**Decision:** Go becomes the ingestion orchestrator. Python becomes a stateless worker.
+
+**Write ownership split:**
+| Table | Go writes | Python writes |
+|-------|-----------|---------------|
+| `documents` | ✅ (INSERT ON CONFLICT) | — |
+| `ingestion_runs` | ✅ (status=queued) | ✅ (status transitions, heartbeat, stats) |
+| `document_versions` | — | ✅ (content_hash, version creation) |
+| `chunks` | — | ✅ |
+| `chunk_embeddings` | — | ✅ |
+| `chunk_fts` | — | ✅ |
+
+**Key design choices:**
+1. **Streaming SHA-256**: Go computes the hash during upload via `io.TeeReader` — never buffers the full file in memory.
+2. **Content-addressed dedup**: `source_uri = upload://sha256:<hash>` — same content always maps to same document via `INSERT ON CONFLICT`.
+3. **Crash guard**: On startup, Go marks stale queued (>1h) and running (>15min no heartbeat) runs as failed.
+4. **Bounded concurrency**: Worker uses `ThreadPoolExecutor(max_workers=3)` and returns 503 when busy.
+5. **Internal auth**: Shared HMAC token (`INTERNAL_AUTH_TOKEN`) between Go and worker. Worker validates Bearer token.
+6. **Heartbeat**: Worker updates `ingestion_runs.updated_at` after each pipeline stage for crash detection.
+7. **V1 = HTTP delegation**: Go POSTs job payload to worker. V2 can swap to SQS without changing the worker contract.
+
+**Schema changes (migrations 009–011):**
+- `users` table added (for future auth).
+- `content_hash` moved from `documents` to `document_versions`.
+- `documents` gets unique index on `(tenant_id, source_uri)` for INSERT ON CONFLICT.
+- `ingestion_runs` gets `queued` status, `doc_id`, `created_at`, `updated_at`, `run_type`, `source_id`, `initiated_by`.
+- `started_at` becomes nullable (set by worker, not Go).
+
+**Rationale:**
+- **Dedup before processing**: Go can skip the entire pipeline if the content hash matches the active version.
+- **Crash recovery**: Heartbeat + crash guard means no run stays stuck forever.
+- **Clean separation**: Orchestration logic (dedup, routing, status) in Go; content processing (extract, chunk, embed) in Python.
+- **Future-proof**: The worker contract (`POST /internal/process` with JSON payload) works identically for HTTP and SQS delivery.
+
+**Trade-off acknowledged:**
+- Go now writes to `documents` and `ingestion_runs`, breaking the pure "Python writes, Go reads" model from ADR-004.
+- Accepted because the orchestration tables are structurally different from content tables, and the split is well-defined.
+- The CLI ingestion path (`ingest` service) still writes directly to all tables for batch operations.
+
+**Replaces:** `ingest-api` (FastAPI) service. The `ingest-worker` (Flask) service takes its place with a different contract.

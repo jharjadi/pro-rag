@@ -89,10 +89,10 @@ export async function uploadDocument(
 ): Promise<IngestResponse> {
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("tenant_id", TENANT_ID);
   formData.append("title", title);
 
-  return apiFetch<IngestResponse>("/api/ingest", {
+  // Pass tenant_id as query param (auth middleware reads from query params in dev mode)
+  return apiFetch<IngestResponse>(`/api/ingest?tenant_id=${TENANT_ID}`, {
     method: "POST",
     body: formData,
   });

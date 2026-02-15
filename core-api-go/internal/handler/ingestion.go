@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	authmw "github.com/jharjadi/pro-rag/core-api-go/internal/middleware"
 	"github.com/jharjadi/pro-rag/core-api-go/internal/model"
 )
 
@@ -20,13 +21,14 @@ func NewIngestionHandler(pool *pgxpool.Pool) *IngestionHandler {
 	return &IngestionHandler{pool: pool}
 }
 
-// List handles GET /v1/ingestion-runs?tenant_id=...&page=1&limit=20
+// List handles GET /v1/ingestion-runs?page=1&limit=20
 func (h *IngestionHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	tenantID := r.URL.Query().Get("tenant_id")
+	// tenant_id from auth middleware context (spec v2.3 §2.1)
+	tenantID := authmw.TenantIDFromContext(ctx)
 	if tenantID == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id query parameter is required")
+		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id is required")
 		return
 	}
 
@@ -45,12 +47,12 @@ func (h *IngestionHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch runs
+	// Fetch runs (updated for new schema: created_at, started_at nullable, doc_id, run_type)
 	rows, err := h.pool.Query(ctx,
-		`SELECT run_id, status, started_at, finished_at, config, stats, error
+		`SELECT run_id, doc_id, status, run_type, created_at, started_at, finished_at, config, stats, error
 		 FROM ingestion_runs
 		 WHERE tenant_id = $1
-		 ORDER BY started_at DESC
+		 ORDER BY created_at DESC
 		 LIMIT $2 OFFSET $3`,
 		tenantID, pg.Limit, pg.Offset(),
 	)
@@ -65,7 +67,8 @@ func (h *IngestionHandler) List(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var run model.IngestionRunItem
 		if err := rows.Scan(
-			&run.RunID, &run.Status, &run.StartedAt, &run.FinishedAt,
+			&run.RunID, &run.DocID, &run.Status, &run.RunType,
+			&run.CreatedAt, &run.StartedAt, &run.FinishedAt,
 			&run.Config, &run.Stats, &run.Error,
 		); err != nil {
 			slog.Error("failed to scan ingestion run row", "error", err)
@@ -73,9 +76,9 @@ func (h *IngestionHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Compute duration if finished
-		if run.FinishedAt != nil {
-			durationMS := run.FinishedAt.Sub(run.StartedAt).Milliseconds()
+		// Compute duration if both started and finished
+		if run.StartedAt != nil && run.FinishedAt != nil {
+			durationMS := run.FinishedAt.Sub(*run.StartedAt).Milliseconds()
 			run.DurationMS = &durationMS
 		}
 
@@ -96,25 +99,27 @@ func (h *IngestionHandler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Get handles GET /v1/ingestion-runs/:id?tenant_id=...
+// Get handles GET /v1/ingestion-runs/:id
 func (h *IngestionHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	runID := chi.URLParam(r, "id")
 
-	tenantID := r.URL.Query().Get("tenant_id")
+	// tenant_id from auth middleware context (spec v2.3 §2.1)
+	tenantID := authmw.TenantIDFromContext(ctx)
 	if tenantID == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id query parameter is required")
+		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id is required")
 		return
 	}
 
 	var run model.IngestionRunItem
 	err := h.pool.QueryRow(ctx,
-		`SELECT run_id, status, started_at, finished_at, config, stats, error
+		`SELECT run_id, doc_id, status, run_type, created_at, started_at, finished_at, config, stats, error
 		 FROM ingestion_runs
 		 WHERE run_id = $1 AND tenant_id = $2`,
 		runID, tenantID,
 	).Scan(
-		&run.RunID, &run.Status, &run.StartedAt, &run.FinishedAt,
+		&run.RunID, &run.DocID, &run.Status, &run.RunType,
+		&run.CreatedAt, &run.StartedAt, &run.FinishedAt,
 		&run.Config, &run.Stats, &run.Error,
 	)
 	if err != nil {
@@ -127,9 +132,9 @@ func (h *IngestionHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Compute duration if finished
-	if run.FinishedAt != nil {
-		durationMS := run.FinishedAt.Sub(run.StartedAt).Milliseconds()
+	// Compute duration if both started and finished
+	if run.StartedAt != nil && run.FinishedAt != nil {
+		durationMS := run.FinishedAt.Sub(*run.StartedAt).Milliseconds()
 		run.DurationMS = &durationMS
 	}
 

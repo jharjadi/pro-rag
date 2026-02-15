@@ -2,10 +2,14 @@ import { NextRequest } from "next/server";
 import { API_URL } from "../proxy";
 
 export async function POST(request: NextRequest) {
-  // Forward multipart form data as-is to Go API gateway
+  // Forward multipart form data as-is to Go API gateway.
+  // Pass tenant_id as query param so auth middleware can read it without
+  // triggering ParseMultipartForm (which would limit file size to 32MB default).
   const contentType = request.headers.get("Content-Type") || "";
+  const tenantId = request.nextUrl.searchParams.get("tenant_id") || "";
 
-  const res = await fetch(`${API_URL}/v1/ingest`, {
+  const qs = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
+  const res = await fetch(`${API_URL}/v1/ingest${qs}`, {
     method: "POST",
     headers: { "Content-Type": contentType },
     body: request.body,

@@ -3,8 +3,8 @@
 #
 # Tests the full web integration flow through the Go API gateway:
 #   1. Create a small test HTML file
-#   2. Upload via POST /v1/ingest (multipart form → Go proxy → ingest-api)
-#   3. Poll ingestion run until complete
+#   2. Upload via POST /v1/ingest (multipart form → Go orchestrator → ingest-worker)
+#   3. Poll ingestion run until complete (queued → running → succeeded)
 #   4. Verify document appears in document list
 #   5. Query about the document content
 #   6. Verify answer has citations referencing the uploaded document
@@ -13,7 +13,7 @@
 #   9. Clean up
 #
 # Prerequisites:
-#   - Full Docker Compose stack running (postgres, embed, core-api-go, ingest-api, web)
+#   - Full Docker Compose stack running (postgres, embed, core-api-go, ingest-worker, web)
 #   - Migrations applied and seed data loaded
 #
 # Usage:
@@ -156,7 +156,7 @@ if [ "$UPLOAD_HTTP_CODE" = "202" ]; then
 else
   fail "POST /v1/ingest returns 202 Accepted" "got HTTP $UPLOAD_HTTP_CODE — body: $UPLOAD_BODY"
   echo ""
-  echo "==> Upload failed. Is ingest-api running? Aborting."
+  echo "==> Upload failed. Is ingest-worker running? Aborting."
   exit 1
 fi
 
@@ -174,9 +174,14 @@ fi
 header "Step 3: Poll ingestion run until complete"
 
 ATTEMPT=0
-INGEST_STATUS="running"
+INGEST_STATUS="queued"
 
-while [ "$INGEST_STATUS" = "running" ] && [ "$ATTEMPT" -lt "$POLL_MAX_ATTEMPTS" ]; do
+# Poll until terminal status (succeeded/failed) or timeout.
+# New flow: queued → running → succeeded/failed (spec v2.3 §9.3)
+while [ "$INGEST_STATUS" = "queued" ] || [ "$INGEST_STATUS" = "running" ]; do
+  if [ "$ATTEMPT" -ge "$POLL_MAX_ATTEMPTS" ]; then
+    break
+  fi
   ATTEMPT=$((ATTEMPT + 1))
   sleep "$POLL_INTERVAL"
 
@@ -188,8 +193,8 @@ done
 
 if [ "$INGEST_STATUS" = "succeeded" ]; then
   pass "Ingestion completed successfully (status=succeeded)"
-elif [ "$INGEST_STATUS" = "running" ]; then
-  fail "Ingestion completed" "still running after $((ATTEMPT * POLL_INTERVAL))s — timed out"
+elif [ "$INGEST_STATUS" = "running" ] || [ "$INGEST_STATUS" = "queued" ]; then
+  fail "Ingestion completed" "still $INGEST_STATUS after $((ATTEMPT * POLL_INTERVAL))s — timed out"
   exit 1
 else
   INGEST_ERROR=$(echo "$RUN_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error','unknown'))" 2>/dev/null || echo "unknown")

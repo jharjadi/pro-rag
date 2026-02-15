@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	authmw "github.com/jharjadi/pro-rag/core-api-go/internal/middleware"
 	"github.com/jharjadi/pro-rag/core-api-go/internal/model"
 )
 
@@ -22,13 +23,14 @@ func NewDocumentHandler(pool *pgxpool.Pool) *DocumentHandler {
 	return &DocumentHandler{pool: pool}
 }
 
-// List handles GET /v1/documents?tenant_id=...&page=1&limit=20&search=...
+// List handles GET /v1/documents?page=1&limit=20&search=...
 func (h *DocumentHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	tenantID := r.URL.Query().Get("tenant_id")
+	// tenant_id from auth middleware context (spec v2.3 §2.1)
+	tenantID := authmw.TenantIDFromContext(ctx)
 	if tenantID == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id query parameter is required")
+		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id is required")
 		return
 	}
 
@@ -37,12 +39,14 @@ func (h *DocumentHandler) List(w http.ResponseWriter, r *http.Request) {
 	pg := model.DefaultPagination(page, limit)
 	search := r.URL.Query().Get("search")
 
-	// Count total documents
+	// Count total documents (only those with at least one active version — spec v2.3 §4.4)
 	var total int
-	countQuery := `SELECT COUNT(*) FROM documents WHERE tenant_id = $1`
+	countQuery := `SELECT COUNT(*) FROM documents d
+		INNER JOIN document_versions dv ON d.doc_id = dv.doc_id AND d.tenant_id = dv.tenant_id AND dv.is_active = true
+		WHERE d.tenant_id = $1`
 	countArgs := []interface{}{tenantID}
 	if search != "" {
-		countQuery += ` AND title ILIKE $2`
+		countQuery += ` AND d.title ILIKE $2`
 		countArgs = append(countArgs, "%"+search+"%")
 	}
 	if err := h.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total); err != nil {
@@ -51,14 +55,14 @@ func (h *DocumentHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch documents with active version info
+	// Fetch documents with active version info (spec v2.3 §4.4: only docs with active versions)
 	query := `
 		SELECT
-			d.doc_id, d.title, d.source_type, d.source_uri, d.content_hash, d.created_at,
-			dv.doc_version_id, dv.version_label, dv.effective_at,
+			d.doc_id, d.title, d.source_type, d.source_uri, d.created_at,
+			dv.doc_version_id, dv.version_label, dv.effective_at, dv.content_hash,
 			COALESCE(cs.chunk_count, 0), COALESCE(cs.total_tokens, 0)
 		FROM documents d
-		LEFT JOIN document_versions dv
+		INNER JOIN document_versions dv
 			ON dv.doc_id = d.doc_id AND dv.tenant_id = d.tenant_id AND dv.is_active = true
 		LEFT JOIN LATERAL (
 			SELECT COUNT(*) AS chunk_count, COALESCE(SUM(token_count), 0) AS total_tokens
@@ -89,13 +93,13 @@ func (h *DocumentHandler) List(w http.ResponseWriter, r *http.Request) {
 	docs := make([]model.DocumentListItem, 0)
 	for rows.Next() {
 		var doc model.DocumentListItem
-		var dvID, dvLabel sql.NullString
+		var dvID, dvLabel, dvContentHash string
 		var dvEffective sql.NullTime
 		var chunkCount, totalTokens int
 
 		if err := rows.Scan(
-			&doc.DocID, &doc.Title, &doc.SourceType, &doc.SourceURI, &doc.ContentHash, &doc.CreatedAt,
-			&dvID, &dvLabel, &dvEffective,
+			&doc.DocID, &doc.Title, &doc.SourceType, &doc.SourceURI, &doc.CreatedAt,
+			&dvID, &dvLabel, &dvEffective, &dvContentHash,
 			&chunkCount, &totalTokens,
 		); err != nil {
 			slog.Error("failed to scan document row", "error", err)
@@ -103,14 +107,13 @@ func (h *DocumentHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if dvID.Valid {
-			doc.ActiveVersion = &model.ActiveVersionSummary{
-				DocVersionID: dvID.String,
-				VersionLabel: dvLabel.String,
-				EffectiveAt:  dvEffective.Time,
-				ChunkCount:   chunkCount,
-				TotalTokens:  totalTokens,
-			}
+		doc.ContentHash = dvContentHash
+		doc.ActiveVersion = &model.ActiveVersionSummary{
+			DocVersionID: dvID,
+			VersionLabel: dvLabel,
+			EffectiveAt:  dvEffective.Time,
+			ChunkCount:   chunkCount,
+			TotalTokens:  totalTokens,
 		}
 
 		docs = append(docs, doc)
@@ -130,24 +133,25 @@ func (h *DocumentHandler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Get handles GET /v1/documents/:id?tenant_id=...
+// Get handles GET /v1/documents/:id
 func (h *DocumentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	docID := chi.URLParam(r, "id")
 
-	tenantID := r.URL.Query().Get("tenant_id")
+	// tenant_id from auth middleware context (spec v2.3 §2.1)
+	tenantID := authmw.TenantIDFromContext(ctx)
 	if tenantID == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id query parameter is required")
+		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id is required")
 		return
 	}
 
-	// Fetch document
+	// Fetch document (content_hash now lives on document_versions, not documents)
 	var doc model.DocumentDetailResponse
 	err := h.pool.QueryRow(ctx,
-		`SELECT doc_id, title, source_type, source_uri, content_hash, created_at
+		`SELECT doc_id, title, source_type, source_uri, created_at
 		 FROM documents WHERE doc_id = $1 AND tenant_id = $2`,
 		docID, tenantID,
-	).Scan(&doc.DocID, &doc.Title, &doc.SourceType, &doc.SourceURI, &doc.ContentHash, &doc.CreatedAt)
+	).Scan(&doc.DocID, &doc.Title, &doc.SourceType, &doc.SourceURI, &doc.CreatedAt)
 
 	if err != nil {
 		if err.Error() == "no rows in result set" {
@@ -159,10 +163,11 @@ func (h *DocumentHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch versions with chunk stats
+	// Fetch versions with chunk stats (content_hash now on document_versions)
 	rows, err := h.pool.Query(ctx,
 		`SELECT
 			dv.doc_version_id, dv.version_label, dv.is_active, dv.effective_at, dv.created_at,
+			dv.content_hash,
 			COALESCE(cs.chunk_count, 0), COALESCE(cs.total_tokens, 0)
 		FROM document_versions dv
 		LEFT JOIN LATERAL (
@@ -186,11 +191,16 @@ func (h *DocumentHandler) Get(w http.ResponseWriter, r *http.Request) {
 		var v model.VersionDetail
 		if err := rows.Scan(
 			&v.DocVersionID, &v.VersionLabel, &v.IsActive, &v.EffectiveAt, &v.CreatedAt,
+			&v.ContentHash,
 			&v.ChunkCount, &v.TotalTokens,
 		); err != nil {
 			slog.Error("failed to scan version row", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal", "failed to read versions")
 			return
+		}
+		// Set doc-level content_hash from active version
+		if v.IsActive {
+			doc.ContentHash = v.ContentHash
 		}
 		doc.Versions = append(doc.Versions, v)
 	}
@@ -198,14 +208,15 @@ func (h *DocumentHandler) Get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, doc)
 }
 
-// ListChunks handles GET /v1/documents/:id/chunks?tenant_id=...&page=1&limit=50&version_id=...
+// ListChunks handles GET /v1/documents/:id/chunks?page=1&limit=50&version_id=...
 func (h *DocumentHandler) ListChunks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	docID := chi.URLParam(r, "id")
 
-	tenantID := r.URL.Query().Get("tenant_id")
+	// tenant_id from auth middleware context (spec v2.3 §2.1)
+	tenantID := authmw.TenantIDFromContext(ctx)
 	if tenantID == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id query parameter is required")
+		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id is required")
 		return
 	}
 
@@ -291,14 +302,15 @@ func (h *DocumentHandler) ListChunks(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Deactivate handles POST /v1/documents/:id/deactivate?tenant_id=...
+// Deactivate handles POST /v1/documents/:id/deactivate
 func (h *DocumentHandler) Deactivate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	docID := chi.URLParam(r, "id")
 
-	tenantID := r.URL.Query().Get("tenant_id")
+	// tenant_id from auth middleware context (spec v2.3 §2.1)
+	tenantID := authmw.TenantIDFromContext(ctx)
 	if tenantID == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id query parameter is required")
+		writeError(w, http.StatusBadRequest, "bad_request", "tenant_id is required")
 		return
 	}
 
